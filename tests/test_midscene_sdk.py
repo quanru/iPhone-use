@@ -20,8 +20,8 @@ def screenshot():
     def chunk(kind, data):
         return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
     return base64.b64encode(b"\x89PNG\r\n\x1a\n" +
-        chunk(b"IHDR", struct.pack(">2I5B", 100, 200, 8, 2, 0, 0, 0)) +
-        chunk(b"IDAT", zlib.compress((b"\0" + b"\xff\xff\xff" * 100) * 200)) +
+        chunk(b"IHDR", struct.pack(">2I5B", 300, 600, 8, 2, 0, 0, 0)) +
+        chunk(b"IDAT", zlib.compress((b"\0" + b"\xff\xff\xff" * 300) * 600)) +
         chunk(b"IEND", b"")).decode()
 
 
@@ -61,7 +61,7 @@ class MidsceneSDKTests(unittest.TestCase):
                         content_type = "application/json"
                 else:
                     values = {"/status": {"ready": True},
-                              "/session/borrowed/wda/screen": {"scale": 1},
+                              "/session/borrowed/wda/screen": {"scale": 3},
                               "/session/borrowed/window/rect": {"x": 0, "y": 0, "width": 100, "height": 200},
                               "/session/borrowed/screenshot": screenshot()}
                     raw = json.dumps({"sessionId": "borrowed", "value": values.get(self.path, {})}).encode()
@@ -99,7 +99,7 @@ class MidsceneSDKTests(unittest.TestCase):
                 return {execution["id"]: execution for dump in dumps
                         for execution in json.loads(dump)["executions"]}
             original = executions_in_report()
-            self.assertEqual(len(original), 2)
+            self.assertEqual(len(original), 1)
             for action, args in [("tap", {"x": 10, "y": 20}),
                                  ("swipe", {"x": 50, "y": 150, "end_x": 50, "end_y": 50}),
                                  ("input", {"text": "hello"}),
@@ -109,10 +109,18 @@ class MidsceneSDKTests(unittest.TestCase):
                 self.assertEqual(outcome["report"], str(report))
                 self.assertTrue(original.keys() <= executions_in_report().keys())
             executions = executions_in_report()
-            self.assertEqual(len(executions), 12)
+            self.assertEqual(len(executions), 6)
+            tasks = [t for e in executions.values() for t in e["tasks"]]
+            actions = [t for t in tasks if t["type"] == "Action Space"]
+            self.assertEqual([t["subType"] for t in actions], ["Tap", "Swipe", "Input"])
+            for task in actions:
+                self.assertEqual(len(task["recorder"]), 2)
+                self.assertGreater(task["timing"]["cost"], 0)
+                self.assertGreaterEqual(task["timing"]["callActionEnd"], task["timing"]["callActionStart"])
+            self.assertEqual(actions[0]["param"]["locate"]["center"], [30, 60])
             self.assertTrue(any(t["status"] == "failed" for e in executions.values() for t in e["tasks"]))
             self.assertNotEqual(run("screenshot", report_id="other-task")["report"], str(report))
-            self.assertEqual(len(executions_in_report()), 12)
+            self.assertEqual(len(executions_in_report()), 6)
         self.assertEqual(models, [], "Host-driven mode must never invoke a model")
         self.assertIn(("POST", "/session/borrowed/wda/tap"), requests)
         self.assertIn(("GET", "/session/borrowed/screenshot"), requests)

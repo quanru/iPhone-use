@@ -7,4 +7,5 @@ python3 scripts/package.py --validate-only
 node --check tooling/forward.mjs
 node --check tooling/screen-stream.mjs
 node --check server/midscene/run.mjs
+node --check server/midscene/action-report.mjs
 python3 scripts/check_screen_ui.py

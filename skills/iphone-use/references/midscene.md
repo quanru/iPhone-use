@@ -35,8 +35,10 @@ Input does not check whether a focused field is secure. The host must inspect th
 
 ## Task reports
 
-Omit report_id on the first call; keep its returned ID on later calls in the same task. IDs use 1–64 ASCII letters, digits, underscores or hyphens. A new task uses a new ID. The SDK appends before/after captures and host verdicts to one HTML report under the private state directory's midscene_run/report. Reuse requires the same state directory. The ID does not deduplicate or retry actions.
+Omit report_id on the first call; keep its returned ID on later calls in the same task. IDs use 1–64 ASCII letters, digits, underscores or hyphens. A new task uses a new ID. The SDK writes native Action Space entries for Tap, Swipe, Input, Launch and IOSHomeButton, with parameters, measured duration and before/after captures. Screenshot and host verdict entries remain Log records. It appends these entries to one HTML report under the private state directory's midscene_run/report. Reuse requires the same state directory. The ID does not deduplicate or retry actions.
 
 Each response contains decision_source=chat_host, report_id, report, viewport and an image. The host's verdict is not an independent Midscene AI assertion. A failed action or host verdict returns midscene_failed with report/image evidence when available. Mutations are uncertain on failure; inspect current state before continuing. The 60-second worker timeout can leave a partial report. Preflight failures produce no execution. Ordinary PUA operations do not appear in Midscene reports.
 
 Reports contain screenshots and task content. Keep them local unless the user authorizes sharing. Do not run an independent CLI against the same phone concurrently.
+
+A returned `report` path is an actual report even when no AI inference was performed. Include its link in the final response; do not describe it as missing merely because aiAct/aiAssert was not used. Reports made by older plugin versions may contain only screenshot logs; those historical logs are not relabeled as native actions.
