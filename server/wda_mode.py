@@ -18,7 +18,7 @@ def read(state_dir):
             raise ValueError()
         return value['mode']
     except FileNotFoundError:
-        return 'off'
+        return 'steps'
     except (ValueError, AttributeError, OSError):
         raise WDAError('invalid_execution_mode', 'Execution preference is unreadable; explicitly set a mode before continuing.') from None
 

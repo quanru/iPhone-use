@@ -159,8 +159,13 @@ class MidsceneTests(unittest.TestCase):
                 self.call('auth_login', report_id='unexpected')
         self.runtime.client.request.assert_not_called()
 
-    def test_preference_defaults_off_and_blocks_even_if_authorized(self):
+    def test_preference_defaults_steps_and_explicit_off_blocks_even_if_authorized(self):
         (self.root / 'execution-mode.json').unlink()
+        self.assertEqual(self.call('settings')['mode'], 'steps')
+        with patch.object(wda_midscene.wda_chatgpt, 'run', return_value={'ok': True, 'authorized': True}):
+            self.call('auth_status')
+        self.assertEqual(self.call('settings')['mode'], 'steps')
+        self.call('settings', mode='off')
         self.assertEqual(self.call('settings')['mode'], 'off')
         with self.assertRaises(WDAError) as error:
             self.call()

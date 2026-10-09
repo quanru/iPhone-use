@@ -4,7 +4,7 @@ Explicit device actions use the current chat model's decisions without a second 
 
 ## Continue with ChatGPT
 
-First read `pua_midscene(action="settings")`. The persistent mode defaults to `off`; set `mode="steps"` for explicit actions/reports or `mode="ai"` for AI tasks only on user request. Settings work without Node, phone access or OAuth. Mode changes serialize with device operations. Authorization never changes the mode. Disabling retains authorization and reports; upgrades without an explicit preference stay off.
+First read `pua_midscene(action="settings")`. The persistent mode defaults to `steps`; set `mode="steps"` for explicit actions/reports or `mode="ai"` for AI tasks only on user request. Settings work without Node, phone access or OAuth. Mode changes serialize with device operations. Authorization never changes the mode. Disabling retains authorization and reports; new installations and upgrades without an explicit preference use steps, never ai.
 
 Only in ai mode, check auth_status and use act/assert after consent. In steps mode, do not invoke AI or initiate sign-in. In off mode, use original PUA controls.
 

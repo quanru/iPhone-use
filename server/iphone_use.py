@@ -117,7 +117,7 @@ DESCRIPTIONS={
  "metrics":"In-process totals without text, app data or images: PUA HTTP time and bytes, tool time, response bytes per tool, and the wait between each response and the next tool request (host, model and user time). reset=true starts a new window."
 }
 DESCRIPTIONS["apps"]="Resolve a real bundle ID by installed-device inventory, bundled verified aliases, or Apple's Search API. Query app name before launch instead of guessing. Store metadata does not prove installation; check installed_verified and publisher/country."
-DESCRIPTIONS["midscene"]="Midscene settings: off/steps/ai, default off. AI needs consent. Read skill; reuse report_id."
+DESCRIPTIONS["midscene"]="Midscene settings: off/steps/ai, default steps. AI needs consent. Read skill; reuse report_id."
 READS={"doctor","observe","find","wait","metrics","apps"}
 READS.update(("screen","screen_frame"))
 DESCRIPTIONS["screen"]="Open or reuse the live iPhone screen in the Codex side panel. No phone actions or UI controls. Pause the preview before password/Face ID user takeover; resume after explicit completion. READY also opens or reuses this view by default."
@@ -601,7 +601,7 @@ def tool_result(runtime,params):
 
 INSTRUCTIONS=(
  "PUA means Phone Use Agent; all iPhone Use tools use the pua_ prefix. "
- "Read pua_midscene settings once per task: off (default) uses PUA; steps uses Midscene explicit actions; ai uses act/assert with separate consent. Change mode only on user request, never from auth status. Read skill; reuse report_id. "
+ "Read pua_midscene settings once per task: off uses PUA; steps (default) uses Midscene explicit actions; ai uses act/assert with separate consent. Change mode only on user request, never from auth status. Read skill; reuse report_id. "
  "Read iphone-use-setup before setup and iphone-use for tasks. First phone task in a new chat: pua_ready(recover=true, screenshot=false); only ready=true permits phone tasks, then reuse READY's observation and the healthy channel. "
  "If READY fails with pua_unreachable/not_ready, continue initialization rather than end the task: pua_setup(action=status), reuse an active start/recovery job or start once from the existing config/build, poll that job until service.ready=true, then READY again. Missing config/source/build uses the setup skill. "
  "recover=true is runtime recovery, not cold startup; for state=recovering follow its setup job until the service is ready, then READY again. Honor explicit diagnostic/no-start/no-restart instructions. "

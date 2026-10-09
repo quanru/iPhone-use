@@ -1,6 +1,6 @@
 ---
 name: iphone-use
-description: 操作真实 iPhone，默认使用 PUA；可选 Midscene 单步报告或 ChatGPT 授权的 AI 自动执行。支持持久模式开关、初始化、实时屏幕及认证接管。
+description: 操作真实 iPhone，默认开启 Midscene 单步动作与报告，不调用内部 AI；可关闭回到 PUA，或另行开启 ChatGPT 授权的 AI 自动执行。支持持久开关、初始化、实时屏幕及认证接管。
 ---
 
 # 完成 iPhone 任务
@@ -9,11 +9,11 @@ description: 操作真实 iPhone，默认使用 PUA；可选 Midscene 单步报�
 
 面向用户只解释“Midscene 开关”和高级选项“AI 自动执行”，不要求用户选择三个技术模式。以下值仅用于工具路由。
 
-- `off`（默认）：使用 [PUA 操作](references/pua-fallback.md)，不查授权，不生成 Midscene 报告。
-- `steps`：当前聊天模型看图决策，Midscene 执行明确动作并记录报告；即使已授权，也不使用 act/assert。
+- `off`：使用 [PUA 操作](references/pua-fallback.md)，不查授权，不生成 Midscene 报告。
+- `steps`（默认）：当前聊天模型看图决策，Midscene 执行明确动作并记录报告；即使已授权，也不使用 act/assert。
 - `ai`：读取 [操作与授权](references/midscene.md)，检查 auth_status，授权后使用 act/assert。未授权时说明单独授权和额外用量，由用户在官方页面完成；不复制宿主凭据。
 
-“开启 Midscene”选 steps；“开启 AI 自动执行”选 ai；“关闭 AI 自动执行”选 steps；“关闭 Midscene”选 off。授权与模式独立，登录不改变模式；关闭保留登录和报告。升级不从历史报告或授权推断开启。正在执行时等待完成再切换，不重放不确定动作。
+“开启 Midscene”选 steps；“开启 AI 自动执行”选 ai；“关闭 AI 自动执行”选 steps；“关闭 Midscene”选 off。授权与模式独立，登录不改变模式；关闭保留登录和报告。新安装或升级未设置偏好时使用 steps，不从授权推断开启 AI；已保存的 off 或 ai 保持不变。正在执行时等待完成再切换，不重放不确定动作。
 
 渐进引导只在需求相关时出现：需要回放、排查时介绍单步报告的截图、操作和耗时记录，说明它不新增内部模型请求；需要多步自动执行或视觉核验时再介绍 AI 模式的额外授权和用量。不承诺更快、更省或必然成功。用户拒绝或关闭后不反复建议、不自动重开。
 
