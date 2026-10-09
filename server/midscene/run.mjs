@@ -18,7 +18,16 @@ try {
     sessionId: request.sessionId,
   });
   await device.connect();
-  agent = new IOSAgent(device);
+  agent = new IOSAgent(device, {
+    aiContexts: {
+      aiAct: 'iOS may show list rows through translucent fixed search bars, tab bars, or the keyboard. '
+        + 'A visible label behind an overlay is not tappable. Scroll the list to move the entire target '
+        + 'into the unobstructed middle of the screen before tapping. Scroll direction down reveals '
+        + 'items farther down the list (content moves upward); up reveals earlier items. '
+        + 'If a tap leaves the screen unchanged, inspect for an overlay and change the approach; '
+        + 'do not keep tapping the same obstructed target. Confirm the destination screen before finishing.',
+    },
+  });
   let value;
   if (request.action === 'act') value = await agent.aiAct(request.prompt);
   else if (request.action === 'query') value = await agent.aiQuery(request.prompt);

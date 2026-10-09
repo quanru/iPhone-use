@@ -4,7 +4,7 @@ Midscene adds screenshot-based natural-language actions, extraction, and asserti
 
 ## Configure
 
-In the installed plugin directory, install the pinned optional SDK:
+Use Node.js 22.19 or newer (Node.js 24 is tested). In the installed plugin directory, install the pinned optional SDK:
 
 ```sh
 npm ci --prefix server/midscene
@@ -46,6 +46,8 @@ First obtain `pua_ready` with `ready=true`. Then call:
 ```
 
 All examples are arguments for `pua_midscene`. Use bounded tasks and verify the final result. `act` can perform multiple actions, including submission when instructed: do not include an unauthorized send, purchase, or other commitment. Passwords, verification codes, and Face ID remain user-controlled. Split tasks before authentication, pause the screen, and wait for the user's completion before resuming.
+
+The agent receives iOS-specific guidance to scroll partially obscured targets into the unobstructed screen area before tapping, and to reconsider unchanged screens instead of repeating the same tap. This is model guidance, not a deterministic retry limit; verify the final screen independently.
 
 The worker uses the existing PUA endpoint and session under PUA's cross-process operation lock. It does not install/start PUA or create a second session. Cleanup detaches the borrowed session; PUA reapplies its session settings on the next request. Do not run a separate Midscene CLI against the phone concurrently.
 

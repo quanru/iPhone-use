@@ -63,4 +63,4 @@ def run(runtime, action, prompt):
     finally:
         # Midscene configures the borrowed WDA session. Reapply PUA's settings
         # before its next session request, including after a killed worker.
-        runtime.client._settings_session_id = None
+        runtime.client.reapply_settings()

@@ -97,7 +97,7 @@ class MidsceneTests(unittest.TestCase):
             return Mock(returncode=0, stdout='{"ok":true,"result":"visible text"}')
         self.process.side_effect = execute
         self.assertEqual(self.call("query")["result"], "visible text")
-        self.assertIsNone(self.runtime.client._settings_session_id)
+        self.runtime.client.reapply_settings.assert_called_once_with()
         self.assertEqual(json.loads((self.root / "session.json").read_text())["session_id"], "borrowed-session")
 
     def test_busy_device_refuses_worker(self):
@@ -131,7 +131,7 @@ class MidsceneTests(unittest.TestCase):
         self.assertTrue(error.exception.uncertain)
         self.assertNotIn("test-secret", str(error.exception))
         self.process.assert_called_once()
-        self.assertIsNone(self.runtime.client._settings_session_id)
+        self.runtime.client.reapply_settings.assert_called_once_with()
 
     def test_assert_failure_is_not_reported_as_success_or_mutation(self):
         self.configure()
