@@ -111,6 +111,10 @@ sh scripts/install.sh
 
 屏幕预览在同一聊天中复用已有 widget。底部提供刷新、主屏幕和截图按钮；无图像时保留黑色屏幕的 iPhone 外壳，屏幕内仅显示对应状态图标，顶部显示连接或暂停状态。预览供用户观看，模型定位仍以工具返回的实际图像或控件为依据。
 
+### 可选接入 Midscene
+
+可通过本机私有目录中的 `midscene.json` 启用 Midscene，并配置模型。安装可选 SDK 后，`pua_midscene` 支持自然语言操作、页面查询和可见状态断言，复用现有 WDA 会话与操作锁。默认关闭。配置方式、调用示例和报告说明见 [Midscene 接入指南](skills/iphone-use/references/midscene.md)。
+
 ## 技术亮点
 
 - **本地 USB 通道。** Python MCP 服务通过本机 loopback 转发访问 WDA，运行数据和签名构建保留在本机。
@@ -125,7 +129,7 @@ sh scripts/install.sh
 
 ## 工具概览
 
-模型可用 17 个工具，另有 2 个仅供屏幕 widget 使用的工具。
+模型可用 18 个工具，另有 2 个仅供屏幕 widget 使用的工具。
 
 | 工具 | 用途 |
 | --- | --- |
@@ -136,6 +140,7 @@ sh scripts/install.sh
 | `pua_type_text`、`pua_wait` | Unicode 输入与有界等待 |
 | `pua_batch`、`pua_scroll_find`、`pua_collect_list` | 组合动作、滚动查找与列表采集 |
 | `pua_screen`、`pua_metrics` | 预览开关与有界耗时统计 |
+| `pua_midscene` | 可选的 Midscene 自然语言操作、页面查询和断言 |
 
 界面异常时先返回截图，再由模型判断下一步：滚动查找一次最多滑一次，仍找不到可点击目标就暂停；遮挡、滚动无进展、输入不符或预期页面未出现也走截图兜底。已有截图直接复用，不自动继续盲滑或重放操作。
 

@@ -123,7 +123,9 @@ These changes reduce duplicate requests and model round trips. Overall task spee
 
 ## Tools
 
-There are 17 model tools and 2 additional widget-only tools.
+There are 18 model tools and 2 additional widget-only tools.
+
+`pua_midscene` optionally supports screenshot-based natural-language actions, page queries, and assertions. Enable it and configure a model in the private `midscene.json` file after installing the optional SDK. It reuses the existing WDA session and operation lock and is disabled by default. See the [Midscene integration guide](skills/iphone-use/references/midscene.md).
 
 | Tools | Purpose |
 | --- | --- |
@@ -134,6 +136,7 @@ There are 17 model tools and 2 additional widget-only tools.
 | `pua_type_text`, `pua_wait` | Unicode input and bounded waits |
 | `pua_batch`, `pua_scroll_find`, `pua_collect_list` | Compound actions, search, collection |
 | `pua_screen`, `pua_metrics` | Preview controls and bounded timing statistics |
+| `pua_midscene` | Optional Midscene natural-language actions, page queries, and assertions |
 
 Abnormal UI states return a screenshot for the model to inspect before choosing another action. Scroll search performs at most one swipe per call and stops if the target remains unreachable; occlusion, unproven scroll progress, input mismatch, and failed page expectations use the same fallback. Existing screenshots are reused, without automatic extra gestures or action replay.
 

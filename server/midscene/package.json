@@ -1,0 +1,7 @@
+{
+  "name": "iphone-use-midscene",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20.19.0" },
+  "dependencies": { "@midscene/ios": "1.14.0" }
+}

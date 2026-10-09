@@ -71,6 +71,10 @@ for (const block of result.content ?? []) {
 
 `expect` 和 `verify=true` 是显式验收选项，用于最终关键状态或实际依赖，不是每步必填。HTTP accepted 与业务成功是不同事实；常规任务乐观继续，最终结论只依据关键结果。明确 error、输入 / 提交 uncertain 或动作部分完成时先查看实际状态，再决定剩余步骤。
 
+## 可选 Midscene
+
+用户启用 Midscene 后，可用 `pua_midscene` 按截图执行自然语言任务、查询页面或断言可见状态。先确认 READY，再按 [Midscene 配置与使用](references/midscene.md) 调用。默认关闭；未配置时继续使用现有 PUA 工具。认证、发送授权和不确定动作的处理规则同样适用，失败后先观察，不重放整个任务。
+
 ## 输入与发送
 
 直接用 `pua_type_text(selector, text)` 一次给出用户需要的完整内容，不先写测试短文本或 ASCII，也不自行拆段。selector 找不到输入框时不换写法重试：用坐标点中输入框，再调用不带 selector 的 `pua_type_text(text=...)` 向当前焦点输入。默认 `replace=true, allow_newlines=false, submit=false, verify=false, observe="none"`；普通搜索、筛选等输入后可接着做下一步，未知下一页面时在本次动作返回观察并顺带判断。需要保留已有草稿时按当前内容决定替换或追加；关键最终文本可显式 `verify=true` 核对完整字段。密码、手机解锁码和验证码由用户输入。
