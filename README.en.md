@@ -46,7 +46,7 @@ A reconnect may be required to load newly installed tools. Apple account login, 
 | An Apple account and development team available in Xcode | Sign the on-device WDA Runner |
 | A real iPhone connected over USB | Trust the Mac, enable Developer Mode when required, and keep it unlocked during installation / startup |
 | Python 3.9+ | Run the MCP server using Python's standard library |
-| Node.js 20.19+, 22.12+, or 24+; npm 10+ | USB forwarding and screen streaming; see the project engines and doctor checks |
+| Node.js 22.19+; npm 10+ (Node.js 24 recommended) | Midscene SDK, USB forwarding, and screen streaming |
 
 Xcode must support the phone's iOS version. No jailbreak or separate Appium Server is required. Setup uses a verified, pinned WDA 16.14.0 commit and manages downloads, dependencies, signing, and builds locally.
 
@@ -125,7 +125,7 @@ These changes reduce duplicate requests and model round trips. Overall task spee
 
 There are 18 model tools and 2 additional widget-only tools.
 
-`pua_midscene` optionally supports screenshot-based natural-language actions, page queries, and assertions. Enable it and configure a model in the private `midscene.json` file after installing the optional SDK. It reuses the existing WDA session and operation lock and is disabled by default. See the [Midscene integration guide](skills/iphone-use/references/midscene.md).
+`pua_midscene` is the default phone controller: the current chat model interprets screenshots and decides actions, while the Midscene iOS SDK executes explicit steps and accumulates reports by `report_id`. No external model configuration is needed, and the worker does not call Midscene AI inference APIs. It reuses the existing WDA session and operation lock. See the [Midscene integration guide](skills/iphone-use/references/midscene.md).
 
 | Tools | Purpose |
 | --- | --- |
@@ -136,7 +136,7 @@ There are 18 model tools and 2 additional widget-only tools.
 | `pua_type_text`, `pua_wait` | Unicode input and bounded waits |
 | `pua_batch`, `pua_scroll_find`, `pua_collect_list` | Compound actions, search, collection |
 | `pua_screen`, `pua_metrics` | Preview controls and bounded timing statistics |
-| `pua_midscene` | Optional Midscene natural-language actions, page queries, and assertions |
+| `pua_midscene` | Default Midscene explicit actions, screenshots, and host verification reports |
 
 Abnormal UI states return a screenshot for the model to inspect before choosing another action. Scroll search performs at most one swipe per call and stops if the target remains unreachable; occlusion, unproven scroll progress, input mismatch, and failed page expectations use the same fallback. Existing screenshots are reused, without automatic extra gestures or action replay.
 

@@ -26,9 +26,9 @@ def screenshot():
 
 
 @unittest.skipUnless((WORKER.parent / "node_modules/@midscene/ios").exists(),
-                     "Install optional SDK with npm ci --prefix server/midscene")
+                     "Install SDK with npm ci --prefix server/midscene")
 class MidsceneSDKTests(unittest.TestCase):
-    def test_query_and_assert_reuse_session_send_images_and_write_report(self):
+    def test_host_actions_without_model_reuse_session_and_append_reports(self):
         requests = []
         models = []
         model_value = "fixture screen"
@@ -79,48 +79,42 @@ class MidsceneSDKTests(unittest.TestCase):
         self.addCleanup(server.shutdown)
         port = server.server_address[1]
         env = {key: value for key, value in os.environ.items() if not key.startswith("MIDSCENE_")}
-        env.update(MIDSCENE_MODEL_API_KEY="fixture", MIDSCENE_MODEL_NAME="qwen2.5-vl-72b-instruct",
-                   MIDSCENE_MODEL_FAMILY="qwen2.5-vl", MIDSCENE_MODEL_BASE_URL=f"http://127.0.0.1:{port}/v1")
+
         with tempfile.TemporaryDirectory() as directory:
-            process = subprocess.run(["node", str(WORKER)], input=json.dumps({"action": "query",
-                "prompt": "Return the screen title as a string", "host": "127.0.0.1", "port": port,
-                "sessionId": "borrowed", "reportId": "shared-task"}), text=True, capture_output=True, cwd=directory, env=env, timeout=60)
-            self.assertEqual(process.returncode, 0, process.stderr)
-            result = json.loads(process.stdout)
-            self.assertEqual(result["result"], "fixture screen")
-            self.assertTrue(Path(result["report"]).is_file(), result)
+            def run(action, args=None, report_id="shared-task"):
+                process = subprocess.run(["node", str(WORKER)], input=json.dumps({"action": action,
+                    "args": args or {}, "host": "127.0.0.1", "port": port,
+                    "sessionId": "borrowed", "reportId": report_id}), text=True,
+                    capture_output=True, cwd=directory, env=env, timeout=60)
+                result = json.loads(process.stdout)
+                self.assertEqual(process.returncode, 1 if action == "record" and args["passed"] is False else 0,
+                                 process.stderr + str(result))
+                return result
+            result = run("screenshot")
+            self.assertTrue(result["ok"])
+            self.assertIn("data:image/png", result["screenshot"])
             report = Path(result["report"])
             def executions_in_report():
                 dumps = re.findall(r'<script type="midscene_web_dump" data-group-id=[^>]*>(.*?)</script>', report.read_text(), re.S)
                 return {execution["id"]: execution for dump in dumps
                         for execution in json.loads(dump)["executions"]}
             original = executions_in_report()
-            self.assertEqual(len(original), 1)
-            for truthy in (True, False):
-                model_value = {"StatementIsTruthy": truthy}
-                process = subprocess.run(["node", str(WORKER)], input=json.dumps({"action": "assert",
-                    "prompt": "The expected title is visible", "host": "127.0.0.1", "port": port,
-                    "sessionId": "borrowed", "reportId": "shared-task"}), text=True, capture_output=True, cwd=directory, env=env, timeout=60)
-                self.assertEqual(process.returncode, 0 if truthy else 1, process.stderr)
-                outcome = json.loads(process.stdout)
-                self.assertEqual(outcome["ok"], truthy)
+            self.assertEqual(len(original), 2)
+            for action, args in [("tap", {"x": 10, "y": 20}),
+                                 ("swipe", {"x": 50, "y": 150, "end_x": 50, "end_y": 50}),
+                                 ("input", {"text": "hello"}),
+                                 ("record", {"text": "Visible fixture", "passed": True}),
+                                 ("record", {"text": "Missing fixture", "passed": False})]:
+                outcome = run(action, args)
                 self.assertEqual(outcome["report"], str(report))
                 self.assertTrue(original.keys() <= executions_in_report().keys())
-            dumps = re.findall(r'<script type="midscene_web_dump" data-group-id=[^>]*>(.*?)</script>', report.read_text(), re.S)
-            executions = {execution["id"]: execution for dump in dumps
-                          for execution in json.loads(dump)["executions"]}
-            self.assertEqual(len(executions), 3)
-            self.assertEqual(len(list(Path(directory).rglob("*.html"))), 1)
-            model_value = "separate task"
-            process = subprocess.run(["node", str(WORKER)], input=json.dumps({"action": "query",
-                "prompt": "Return the title", "host": "127.0.0.1", "port": port,
-                "sessionId": "borrowed", "reportId": "other-task"}), text=True,
-                capture_output=True, cwd=directory, env=env, timeout=60)
-            self.assertEqual(process.returncode, 0, process.stderr)
-            self.assertNotEqual(json.loads(process.stdout)["report"], str(report))
-            self.assertEqual(len(executions_in_report()), 3)
-        self.assertEqual(len(models), 4)
-        self.assertIn("data:image/", json.dumps(models))
+            executions = executions_in_report()
+            self.assertEqual(len(executions), 12)
+            self.assertTrue(any(t["status"] == "failed" for e in executions.values() for t in e["tasks"]))
+            self.assertNotEqual(run("screenshot", report_id="other-task")["report"], str(report))
+            self.assertEqual(len(executions_in_report()), 12)
+        self.assertEqual(models, [], "Host-driven mode must never invoke a model")
+        self.assertIn(("POST", "/session/borrowed/wda/tap"), requests)
         self.assertIn(("GET", "/session/borrowed/screenshot"), requests)
         self.assertNotIn(("POST", "/session"), requests)
         self.assertFalse(any(method == "DELETE" for method, _ in requests), requests)

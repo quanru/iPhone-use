@@ -1,75 +1,76 @@
-"""Optional Midscene worker, called while Runtime holds its device operation lock."""
+"""Host-driven Midscene device actions, under Runtime's operation lock."""
+import base64
 import json
 import os
-import re
-import uuid
 from pathlib import Path
+import re
 import shutil
 import subprocess
+import uuid
 
 from wda_client import WDAError
+import wda_image
 
-
-MODEL_ENV = {"MIDSCENE_MODEL_API_KEY", "MIDSCENE_MODEL_NAME",
-             "MIDSCENE_MODEL_BASE_URL", "MIDSCENE_MODEL_FAMILY"}
 WORKER = Path(__file__).parent / "midscene" / "run.mjs"
+MUTATIONS = {"tap", "swipe", "input", "home", "launch"}
+FIELDS = {"screenshot": set(), "tap": {"x", "y"},
+          "swipe": {"x", "y", "end_x", "end_y"}, "input": {"text"},
+          "home": set(), "launch": {"text"}, "record": {"text", "passed"}}
 
 
-def configuration(state_dir):
-    path = Path(state_dir) / "midscene.json"
-    try:
-        config = json.loads(path.read_text()) if path.exists() else {}
-        if not isinstance(config, dict):
-            raise ValueError()
-        if config.get("enabled") is not True:
-            raise WDAError("midscene_disabled", "Enable Midscene in the private state directory's midscene.json; see the Midscene setup guide.")
-        env = config.get("env", {})
-        timeout = config.get("timeout_seconds", 180)
-        if (not isinstance(env, dict) or set(env) - MODEL_ENV
-                or any(not isinstance(v, str) or not v.strip() for v in env.values())
-                or type(timeout) is not int or not 10 <= timeout <= 600):
-            raise ValueError()
-        merged = {**os.environ, **env}
-        if any(not merged.get(key, "").strip() for key in MODEL_ENV):
-            raise WDAError("midscene_not_configured", "Set all four MIDSCENE_MODEL_* variables in midscene.json env or the MCP server environment.")
-        return merged, timeout
-    except (ValueError, OSError):
-        raise WDAError("midscene_invalid_config", "Invalid midscene.json: expected enabled, env model variables and timeout_seconds (10–600).") from None
-
-
-def run(runtime, action, prompt, report_id=None):
-    if report_id is None:
-        report_id = uuid.uuid4().hex
+def run(runtime, action, report_id=None, **args):
+    report_id = report_id if report_id is not None else uuid.uuid4().hex
     if not isinstance(report_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", report_id):
         raise WDAError("invalid_arguments", "report_id must contain 1–64 letters, digits, underscores or hyphens.")
-    env, timeout = configuration(runtime.state_dir)
+    if action not in FIELDS or set(args) != FIELDS[action]:
+        raise WDAError("invalid_arguments", "Supply exactly the fields for this action; see the Midscene guide.")
+    if action == "input" and any(c in args["text"] for c in "\r\n\t"):
+        raise WDAError("invalid_arguments", "Input accepts single-line text only; no implicit submit.")
+    if action == "launch" and not re.fullmatch(r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+", args["text"]):
+        raise WDAError("invalid_arguments", "Launch requires an installed app bundle ID in text.")
     node = shutil.which("node")
     if not node or not (WORKER.parent / "node_modules/@midscene/ios/package.json").is_file():
-        raise WDAError("midscene_not_installed", "Install Node.js and run npm ci --prefix <plugin-root>/server/midscene before enabling Midscene.")
+        raise WDAError("midscene_not_installed", "Install Node.js 22.19+ and run npm ci --prefix <plugin-root>/server/midscene.")
     if runtime.screen.paused():
         raise WDAError("preview_paused", "Resume after the user finishes authentication before using Midscene.", details={"action_executed": False})
     if runtime.client.request("GET", "/wda/locked").get("value") is not False:
         raise WDAError("phone_locked", "Unlock the iPhone before using Midscene.")
     session_id = runtime.client.ensure_session()
-    request = {"action": action, "prompt": prompt, "host": runtime.client.host,
+    request = {"action": action, "args": args, "host": runtime.client.host,
                "port": runtime.client.port, "sessionId": session_id, "reportId": report_id}
     details = {"action_complete": False, "report_id": report_id}
+    # This worker never invokes a model. Do not inherit legacy provider settings.
+    env = {k: v for k, v in os.environ.items() if not k.startswith("MIDSCENE_")}
     try:
-        # Prompts and credentials never appear in process arguments or MCP stdout.
         process = subprocess.run([node, str(WORKER)], input=json.dumps(request),
                                  text=True, capture_output=True, env=env,
-                                 cwd=runtime.state_dir, timeout=timeout)
+                                 cwd=runtime.state_dir, timeout=60)
         result = json.loads(process.stdout)
         if isinstance(result, dict) and isinstance(result.get("report"), str):
             details["report"] = result["report"]
-        if process.returncode or not isinstance(result, dict) or result.get("ok") is not True:
+        if not isinstance(result, dict):
+            raise ValueError()
+        encoded = result.pop("screenshot", None)
+        if encoded:
+            data = base64.b64decode(encoded.split(",", 1)[-1], validate=True)
+            if not data.startswith(wda_image.PNG_SIGNATURE):
+                raise ValueError()
+            artifacts = Path(runtime.state_dir) / "artifacts"
+            artifacts.mkdir(mode=0o700, parents=True, exist_ok=True)
+            path = artifacts / ("midscene-" + uuid.uuid4().hex + ".png")
+            path.write_bytes(data)
+            path.chmod(0o600)
+            image_path, mime, width, height = wda_image.model_image(path)
+            viewport = result["viewport"]
+            result["image"] = {"path": str(image_path), "mimeType": mime,
+                               "width": width, "height": height,
+                               "pixel_to_point": [viewport["width"] / width, viewport["height"] / height]}
+            details["observation"] = {"image": result["image"], "viewport": viewport}
+        if process.returncode or result.get("ok") is not True:
             raise ValueError()
         return {**result, "report_id": report_id}
-    except (subprocess.TimeoutExpired, ValueError, OSError):
-        # Do not expose provider errors: these can contain credentials or screen data.
-        raise WDAError("midscene_failed", "Midscene failed or timed out. Inspect the current screen before continuing; do not replay the task.",
-                       uncertain=action == "act", details=details) from None
+    except (subprocess.TimeoutExpired, ValueError, OSError, KeyError, TypeError):
+        raise WDAError("midscene_failed", "Midscene failed or timed out. Inspect the current screen; do not replay the action.",
+                       uncertain=action in MUTATIONS, details=details) from None
     finally:
-        # Midscene configures the borrowed WDA session. Reapply PUA's settings
-        # before its next session request, including after a killed worker.
         runtime.client.reapply_settings()
