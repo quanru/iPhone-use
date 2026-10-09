@@ -1,11 +1,11 @@
 ---
 name: iphone-use
-description: 默认使用 Midscene 操作真实 iPhone，由当前聊天模型看图、决策和验收；无需外部模型配置。复用 PUA 安装和连接，同一 report_id 累积 HTML 报告。支持设备初始化、App 操作、实时屏幕及认证接管。
+description: 默认使用 Midscene 操作真实 iPhone；可通过 ChatGPT 授权启用 aiAct 和 aiAssert，无需 API Key。复用 PUA 连接，同一 report_id 累积 HTML 报告。支持初始化、App 操作、实时屏幕及认证接管。
 ---
 
 # 用 Midscene 完成 iPhone 任务
 
-用户无需指定 Midscene。默认流程是当前聊天模型读取截图、决定下一步，调用 `pua_midscene` 执行明确动作；SDK 不调用外部模型，也不读取或复制宿主凭据。不能声称这是 Midscene 内部 aiAct/aiQuery/aiAssert 推理。
+用户无需指定 Midscene。先读取 [Midscene 操作与授权](references/midscene.md)，用 `pua_midscene(action="auth_status")` 检查模式：已获 ChatGPT 推理授权时默认用 `act` 执行有明确边界的任务、`assert` 核验结果；没有授权时采用当前聊天模型看图、执行明确动作的流程。登录入口是 `auth_login`，由用户在官方页面完成登录及额度授权；不读取或复制宿主凭据。仅 `act` / `assert` 调用 SDK 内部 AI 接口，明确动作和 `record` 不可冒充 AI 推理或断言。
 
 ## READY 与认证
 
@@ -22,6 +22,8 @@ READY 关联手机屏幕侧边栏，宿主支持时默认打开或复用本聊�
 App 实际要求密码、PIN、验证码、Face ID / Touch ID，或手机需要用户解锁时，按 [认证接管与恢复](references/authentication.md) 等用户完成。App 认证先 `pua_screen(action="pause")`；`phone_locked` 已自动暂停为 `device_locked`，不要再用显式 pause 覆盖原因。必须调用宿主提问工具（Default 优先 `functions.request_user_input_async`），首个选项固定「已完成继续」，第二个可为「暂时无法完成」。异步返回 / 预选不是用户答复；接管期间暂停手机动作、读取和截图，不索取凭据。实际完成通知后，App 认证或旧版未知暂停先 `pua_screen(action="resume")` 再取新观察；设备解锁则重验 READY，成功时仅自动解除同一次锁屏暂停。READY 的 `preview.paused` / `pause_reason` 说明预览状态；不能把 READY 成功当成 App 认证已完成。根据新状态继续剩余工作。
 
 ## 默认执行与报告
+
+已授权模式在 READY 后用 `act, text="具体任务和约束"` 执行，查看返回截图，再用 `assert, text="可观察的完成条件"` 核验；保持同一 report_id。以下单步规则用于未授权的明确动作模式。
 
 READY 后读取 [Midscene 操作参数](references/midscene.md)。先调用 `pua_midscene(action="screenshot")`，保存返回的 `report_id`。同一任务后续每次调用都传这个 ID，新任务使用新 ID。每次只执行一个动作，查看返回截图后再决定下一步。查询页面和断言由当前聊天模型根据截图完成；最终使用 `action="record", text="实际观察及结论", passed=true/false` 记录验收。不得为了得到成功报告而将未确认的结果记为通过。
 

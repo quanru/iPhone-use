@@ -10,12 +10,14 @@ import uuid
 
 from wda_client import WDAError
 import wda_image
+import wda_chatgpt
 
 WORKER = Path(__file__).parent / "midscene" / "run.mjs"
-MUTATIONS = {"tap", "swipe", "input", "home", "launch"}
+MUTATIONS = {"tap", "swipe", "input", "home", "launch", "act"}
 FIELDS = {"screenshot": set(), "tap": {"x", "y"},
           "swipe": {"x", "y", "end_x", "end_y"}, "input": {"text"},
-          "home": set(), "launch": {"text"}, "record": {"text", "passed"}}
+          "home": set(), "launch": {"text"}, "record": {"text", "passed"},
+          "act": {"text"}, "assert": {"text"}}
 
 
 def run(runtime, action, report_id=None, **args):
@@ -24,6 +26,8 @@ def run(runtime, action, report_id=None, **args):
         raise WDAError("invalid_arguments", "report_id must contain 1–64 letters, digits, underscores or hyphens.")
     if action not in FIELDS or set(args) != FIELDS[action]:
         raise WDAError("invalid_arguments", "Supply exactly the fields for this action; see the Midscene guide.")
+    if action in ("act", "assert") and not args["text"].strip():
+        raise WDAError("invalid_arguments", "AI instructions must not be empty.")
     if action == "input" and any(c in args["text"] for c in "\r\n\t"):
         raise WDAError("invalid_arguments", "Input accepts single-line text only; no implicit submit.")
     if action == "launch" and not re.fullmatch(r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+", args["text"]):
@@ -31,6 +35,8 @@ def run(runtime, action, report_id=None, **args):
     node = shutil.which("node")
     if not node or not (WORKER.parent / "node_modules/@midscene/ios/package.json").is_file():
         raise WDAError("midscene_not_installed", "Install Node.js 22.19+ and run npm ci --prefix <plugin-root>/server/midscene.")
+    if action in ("act", "assert") and not wda_chatgpt.run(runtime.state_dir, "auth_status")["authorized"]:
+        raise WDAError("chatgpt_sign_in_required", "Use pua_midscene(action=auth_login) and complete official ChatGPT consent before act/assert.")
     if runtime.screen.paused():
         raise WDAError("preview_paused", "Resume after the user finishes authentication before using Midscene.", details={"action_executed": False})
     if runtime.client.request("GET", "/wda/locked").get("value") is not False:
@@ -39,17 +45,24 @@ def run(runtime, action, report_id=None, **args):
     request = {"action": action, "args": args, "host": runtime.client.host,
                "port": runtime.client.port, "sessionId": session_id, "reportId": report_id}
     details = {"action_complete": False, "report_id": report_id}
-    # This worker never invokes a model. Do not inherit legacy provider settings.
-    env = {k: v for k, v in os.environ.items() if not k.startswith("MIDSCENE_")}
+    # OAuth-only AI mode must not inherit any provider credentials/configuration.
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("MIDSCENE_", "OPENAI_"))}
+    worker = WORKER.with_name("run-ai.mjs") if action in ("act", "assert") else WORKER
+    lock_fd = getattr(runtime, "operation_lock_fd", None)
     try:
-        process = subprocess.run([node, str(WORKER)], input=json.dumps(request),
+        process = subprocess.run([node, str(worker)], input=json.dumps(request),
                                  text=True, capture_output=True, env=env,
-                                 cwd=runtime.state_dir, timeout=60)
+                                 pass_fds=(lock_fd,) if lock_fd is not None else (),
+                                 cwd=runtime.state_dir, timeout=180 if action in ("act", "assert") else 60)
         result = json.loads(process.stdout)
         if isinstance(result, dict) and isinstance(result.get("report"), str):
             details["report"] = result["report"]
         if not isinstance(result, dict):
             raise ValueError()
+        if isinstance(result.get("error"), str):
+            details["reason"] = result["error"]
+        if isinstance(result.get("model"), str):
+            details["model"] = result["model"]
         encoded = result.pop("screenshot", None)
         if encoded:
             data = base64.b64decode(encoded.split(",", 1)[-1], validate=True)
@@ -70,6 +83,9 @@ def run(runtime, action, report_id=None, **args):
             raise ValueError()
         return {**result, "report_id": report_id}
     except (subprocess.TimeoutExpired, ValueError, OSError, KeyError, TypeError):
+        partial = Path(runtime.state_dir) / "midscene_run" / "report" / ("iphone-use-" + report_id + ".html")
+        if partial.is_file():
+            details.setdefault("report", str(partial))
         raise WDAError("midscene_failed", "Midscene failed or timed out. Inspect the current screen; do not replay the action.",
                        uncertain=action in MUTATIONS, details=details) from None
     finally:

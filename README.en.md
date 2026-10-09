@@ -125,7 +125,7 @@ These changes reduce duplicate requests and model round trips. Overall task spee
 
 There are 18 model tools and 2 additional widget-only tools.
 
-`pua_midscene` is the default phone controller: the current chat model interprets screenshots and decides actions, while the Midscene iOS SDK executes explicit steps and accumulates reports by `report_id`. No external model configuration is needed, and the worker does not call Midscene AI inference APIs. It reuses the existing WDA session and operation lock. See the [Midscene integration guide](skills/iphone-use/references/midscene.md).
+`pua_midscene` controls the phone through Midscene and accumulates reports by `report_id`. After `auth_login` and user consent on OpenAI's official page, `act` / `assert` call real aiAct / aiAssert using authorized ChatGPT plan usage, without an API key. The model comes from the account's catalog; it does not inherit the current chat's model or history. Explicit host-driven actions remain available without sign-in. Both modes reuse the WDA session and operation lock. See the [Midscene integration guide](skills/iphone-use/references/midscene.md).
 
 | Tools | Purpose |
 | --- | --- |

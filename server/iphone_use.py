@@ -24,6 +24,7 @@ from wda_apps import AppCatalog
 from wda_screen import ScreenHub
 import wda_image
 import wda_midscene
+import wda_chatgpt
 
 PUAError=WDAError
 VERSION="0.3.6"
@@ -92,7 +93,7 @@ BATCH_OPS=["tap","swipe","type_text","launch_app","press_button","wait","observe
 SCHEMAS["batch"]=obj({"steps":{"type":"array","minItems":1,"maxItems":20,"items":{"oneOf":[obj({"op":{"type":"string","const":op},"args":SCHEMAS[op]},("op","args")) for op in BATCH_OPS]}}},("steps",))
 SCHEMAS["ready"]["examples"]=[{"recover":True,"screenshot":False}]
 SCHEMAS["screen"]=obj({"action":string("Default open displays the live iPhone sidebar. Pause before password/Face ID takeover; resume only after the user confirms completion.",enum=["open","pause","resume"])})
-SCHEMAS["midscene"]=obj({"action":string(enum=["screenshot","tap","swipe","input","home","launch","record"]),"x":num(0,10000),"y":num(0,10000),"end_x":num(0,10000),"end_y":num(0,10000),"text":string(max_length=10000),"passed":BOOL,"report_id":string(max_length=64)},("action",))
+SCHEMAS["midscene"]=obj({"action":string(enum=["screenshot","tap","swipe","input","home","launch","record","act","assert","auth_status","auth_login","auth_logout","auth_cancel","models"]),"x":num(0,10000),"y":num(0,10000),"end_x":num(0,10000),"end_y":num(0,10000),"text":string(max_length=10000),"passed":BOOL,"report_id":string(max_length=64)},("action",))
 SCHEMAS["screen_frame"]=obj({"after_seq":num(0,9007199254740991,"integer"),"last_event_id":num(0,9007199254740991,"integer")})
 SCHEMAS["screen_action"]=obj({"action":string("refresh reconnects the preview stream, home returns the iPhone to its Home screen, screenshot copies a native capture to the Mac clipboard.",enum=["refresh","home","screenshot"])},("action",))
 # Tools the preview App calls itself; the model never sees them.
@@ -115,7 +116,7 @@ DESCRIPTIONS={
  "metrics":"In-process totals without text, app data or images: PUA HTTP time and bytes, tool time, response bytes per tool, and the wait between each response and the next tool request (host, model and user time). reset=true starts a new window."
 }
 DESCRIPTIONS["apps"]="Resolve a real bundle ID by installed-device inventory, bundled verified aliases, or Apple's Search API. Query app name before launch instead of guessing. Store metadata does not prove installation; check installed_verified and publisher/country."
-DESCRIPTIONS["midscene"]="Default phone control after READY. Host decides; Midscene executes. Read the skill for action fields. Reuse report_id."
+DESCRIPTIONS["midscene"]="Phone control and reports. act/assert use authorized ChatGPT inference; auth_login opens consent. Read the skill for fields. Reuse report_id."
 READS={"doctor","observe","find","wait","metrics","apps"}
 READS.update(("screen","screen_frame"))
 DESCRIPTIONS["screen"]="Open or reuse the live iPhone screen in the Codex side panel. No phone actions or UI controls. Pause the preview before password/Face ID user takeover; resume after explicit completion. READY also opens or reuses this view by default."
@@ -288,6 +289,9 @@ class Runtime:
         # sharing this runtime, and share only this plugin's session identity.
         if not isinstance(name,str) or not name.startswith("pua_") or name[4:] not in SCHEMAS:raise WDAError("unknown_tool","Unknown PUA tool.")
         validate(args,SCHEMAS[name[4:]]);validate_semantics(name[4:],args)
+        if name=="pua_midscene" and args["action"] in wda_chatgpt.ACTIONS:
+            if set(args)!={"action"}:raise WDAError("invalid_arguments","Authorization actions accept only action.")
+            return wda_chatgpt.run(self.state_dir,args["action"])
         if name in ("pua_screen","pua_screen_frame","pua_screen_action"):self.identify_device()
         # Cached preview polling does not share the PUA action/session lock.
         if name=="pua_screen_frame":return self.screen.frame(**args)
@@ -304,6 +308,7 @@ class Runtime:
             try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
             except BlockingIOError:raise WDAError("device_busy","Another iPhone Use operation is running. Wait for it to finish before continuing; no action was executed.")
             try:
+                self.operation_lock_fd=lock.fileno()
                 if cache_path.is_file() and hasattr(self.client,"session_id"):
                     try:
                         cached=json.loads(cache_path.read_text())
@@ -323,6 +328,7 @@ class Runtime:
                         if task_temp.exists():task_temp.unlink()
                 elif hasattr(self.client,"session_id") and cache_path.exists():cache_path.unlink()
                 fcntl.flock(lock,fcntl.LOCK_UN)
+                self.operation_lock_fd=None
 
     def identify_device(self):
         """Find the phone's model name for the preview header once, away from the request path."""
@@ -591,7 +597,7 @@ def tool_result(runtime,params):
 
 INSTRUCTIONS=(
  "PUA means Phone Use Agent; all iPhone Use tools use the pua_ prefix. "
- "Default to pua_midscene for phone tasks after READY: host reads screenshots and chooses explicit actions; no external model. Reuse report_id for a task. Read the Midscene skill reference for fields. PUA controls are explicit fallback only. "
+ "Default to pua_midscene after READY. With ChatGPT authorization use act/assert; otherwise host-driven steps. auth_login requires official browser consent. Never copy host credentials. Reuse report_id; read the skill. PUA controls are explicit fallback only. "
  "Read iphone-use-setup before setup and iphone-use for tasks. First phone task in a new chat: pua_ready(recover=true, screenshot=false); only ready=true permits phone tasks, then reuse READY's observation and the healthy channel. "
  "If READY fails with pua_unreachable/not_ready, continue initialization rather than end the task: pua_setup(action=status), reuse an active start/recovery job or start once from the existing config/build, poll that job until service.ready=true, then READY again. Missing config/source/build uses the setup skill. "
  "recover=true is runtime recovery, not cold startup; for state=recovering follow its setup job until the service is ready, then READY again. Honor explicit diagnostic/no-start/no-restart instructions. "

@@ -131,3 +131,27 @@ class MidsceneTests(unittest.TestCase):
         self.assertTrue({'server/midscene/run.mjs', 'server/midscene/package.json',
                          'server/midscene/package-lock.json', 'server/wda_midscene.py'} <= files)
         self.assertFalse(any('node_modules' in name for name in files))
+
+    def test_ai_requires_consent_before_phone_access_and_never_uses_api_key(self):
+        with patch.object(wda_midscene.wda_chatgpt, 'run', return_value={'authorized': False}):
+            with self.assertRaises(WDAError) as error:
+                self.call('assert', text='Expected page')
+        self.assertEqual(error.exception.code, 'chatgpt_sign_in_required')
+        self.runtime.client.request.assert_not_called()
+        with patch.object(wda_midscene.wda_chatgpt, 'run', return_value={'authorized': True}), \
+                patch.dict(wda_midscene.os.environ, {'OPENAI_API_KEY': 'must-not-forward'}):
+            self.call('act', text='Open About')
+        self.assertTrue(self.process.call_args.args[0][1].endswith('run-ai.mjs'))
+        self.assertEqual(self.process.call_args.kwargs['timeout'], 180)
+        self.assertNotIn('OPENAI_API_KEY', self.process.call_args.kwargs['env'])
+        self.assertEqual(len(self.process.call_args.kwargs['pass_fds']), 1)
+
+    def test_authorization_tools_work_without_phone_or_device_lock(self):
+        with patch.object(wda_midscene.wda_chatgpt, 'run', return_value={'ok': True, 'authorized': False}) as auth:
+            with (self.root / 'operation.lock').open('a') as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                self.assertFalse(self.call('auth_status')['authorized'])
+            auth.assert_called_once_with(self.root, 'auth_status')
+            with self.assertRaises(WDAError):
+                self.call('auth_login', report_id='unexpected')
+        self.runtime.client.request.assert_not_called()

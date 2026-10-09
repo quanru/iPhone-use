@@ -113,7 +113,7 @@ sh scripts/install.sh
 
 ### 默认使用 Midscene
 
-默认由当前聊天模型看图和决策，`pua_midscene` 通过 Midscene iOS SDK 执行明确动作、返回截图，并按 `report_id` 累积 HTML 报告。无需外部模型配置，不调用 Midscene 内部 AI 接口。安装 SDK 与参数说明见 [Midscene 接入指南](skills/iphone-use/references/midscene.md)。
+`pua_midscene` 通过 Midscene iOS SDK 操作手机，并按 `report_id` 累积 HTML 报告。使用 `auth_login` 在 OpenAI 官方页面授权后，`act` / `assert` 调用真实的 aiAct / aiAssert，使用获准的 ChatGPT 套餐额度，无需 API Key。模型由账号可用列表选择，不继承当前聊天的模型和历史。未授权时保留当前聊天模型决策的明确动作模式。安装、授权与参数说明见 [Midscene 接入指南](skills/iphone-use/references/midscene.md)。
 
 ## 技术亮点
 
