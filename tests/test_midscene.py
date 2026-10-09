@@ -53,12 +53,23 @@ class MidsceneTests(unittest.TestCase):
         invalid = [('act', {'prompt': 'task'}), ('tap', {'x': 5}),
                    ('screenshot', {'text': 'unexpected'}), ('input', {'text': 'send\n'}),
                    ('launch', {'text': 'https://example.com'}), ('record', {'text': 'done'}),
-                   ('tap', {'x': -1, 'y': 1})]
+                   ('tap', {'x': -1, 'y': 1}), ('screenshot', {'planning': 'compact'}),
+                   ('act', {'text': 'task', 'planning': 'unknown'})]
         for action, args in invalid:
             with self.subTest(action=action, args=args), self.assertRaises(WDAError):
                 self.call(action, **args)
         self.process.assert_not_called()
         self.runtime.client.request.assert_not_called()
+
+    def test_planning_profile_is_explicit_and_default_is_preserved(self):
+        wda_mode.settings(self.root, 'ai')
+        with patch.object(wda_midscene.wda_chatgpt, 'run', return_value={'authorized': True}):
+            self.call('act', text='Read a value', planning='compact')
+            request = json.loads(self.process.call_args.kwargs['input'])
+            self.assertEqual(request['planning'], 'compact')
+            self.assertEqual(request['args'], {'text': 'Read a value'})
+            self.call('act', text='Edit an event')
+            self.assertNotIn('planning', json.loads(self.process.call_args.kwargs['input']))
 
     def test_missing_dependency_without_phone_access(self):
         (wda_midscene.WORKER.parent / 'node_modules/@midscene/ios/package.json').unlink()
@@ -119,12 +130,13 @@ class MidsceneTests(unittest.TestCase):
         self.runtime.client.reapply_settings.assert_called_once_with()
 
     def test_failed_host_verification_preserves_report(self):
-        self.process.return_value = Mock(returncode=1, stdout='{"ok":false,"report":"/local/report.html"}')
+        self.process.return_value = Mock(returncode=1, stdout='{"ok":false,"report":"/local/report.html","model_requests":[{"ok":false,"total_ms":42}]}')
         with self.assertRaises(WDAError) as error:
             self.call('record', text='Expected page missing', passed=False, report_id='task-1')
         self.assertFalse(error.exception.uncertain)
         self.assertEqual(error.exception.details['report_id'], 'task-1')
         self.assertEqual(error.exception.details['report'], '/local/report.html')
+        self.assertEqual(error.exception.details['model_requests'], [{'ok': False, 'total_ms': 42}])
 
     def test_worker_is_shipped_without_node_modules(self):
         sys.path.insert(0, str(ROOT / 'scripts'))

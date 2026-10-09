@@ -6,6 +6,8 @@ import { join } from 'node:path';
 import { generateKeyPair, exportJWK, SignJWT, createLocalJWKSet } from '../server/midscene/node_modules/jose/dist/webapi/index.js';
 import { ChatGPTAuth, verifyIdentity } from '../server/midscene/chatgpt-auth.mjs';
 import { createChatGPTClient } from '../server/midscene/chatgpt-client.mjs';
+import { parseXMLPlanningResponse } from '../server/midscene/node_modules/@midscene/core/dist/es/ai-model/workflows/planning/standard-planning-parser.mjs';
+import { ConversationHistory } from '../server/midscene/node_modules/@midscene/core/dist/es/ai-model/workflows/planning/conversation-history.mjs';
 
 const scope = 'openid profile email offline_access resource.invoke chatgpt.tokens.use.direct';
 const tokens = { access_token: 'test-access', refresh_token: 'test-refresh', id_token: 'test-id',
@@ -171,6 +173,57 @@ test('worker budget reaches the Responses request and cancels inference', async 
   controller.abort();
   await assert.rejects(pending);
   assert.equal(requestSignal.aborted, true);
+});
+
+test('model telemetry measures the stream, records failures, and excludes content', async () => {
+  const events = [];
+  class Client {
+    responses = { create: async () => (async function* () {
+      yield { type: 'response.created' };
+      yield { type: 'response.output_text.delta', delta: 'private-output' };
+      yield { type: 'response.completed', response: { status: 'completed', model: 'fixture',
+        output: [{ type: 'message', content: [{ type: 'output_text', text: 'private-output' }] }],
+        usage: { input_tokens: 10, output_tokens: 2, total_tokens: 12 } } };
+    })() };
+  }
+  const client = await createChatGPTClient({ accessToken: async () => 'private-token' },
+    { Client, onMetrics: m => events.push(m) })();
+  await client.chat.completions.create({ model: 'fixture', messages: [{role:'user',content:'private-prompt'}] });
+  assert.equal(events.length, 1);
+  const m = events[0];
+  assert.equal(m.ok, true);
+  assert.ok(m.auth_ms <= m.request_start_ms && m.request_start_ms <= m.headers_ms);
+  assert.ok(m.headers_ms <= m.first_event_ms && m.first_event_ms <= m.first_text_ms);
+  assert.ok(m.first_text_ms <= m.last_text_ms && m.last_text_ms <= m.completed_ms && m.completed_ms <= m.total_ms);
+  assert.equal(m.usage.input_tokens, 10);
+  assert.doesNotMatch(JSON.stringify(events), /private-/);
+  const failing = await createChatGPTClient({ accessToken: async () => { throw new Error('private-token'); } },
+    { onMetrics: m => events.push(m) })();
+  await assert.rejects(failing.chat.completions.create({model:'fixture',messages:[]}));
+  assert.equal(events.length, 2);
+  assert.equal(events[1].ok, false);
+  assert.equal(events[1].headers_ms, undefined);
+  assert.doesNotMatch(JSON.stringify(events), /private-/);
+  const noisy = await createChatGPTClient({accessToken:async()=> 'token'},
+    {Client,onMetrics:()=>{throw new Error('telemetry sink unavailable');}})();
+  assert.equal((await noisy.chat.completions.create({model:'fixture',messages:[]})).choices[0].message.content,'private-output');
+});
+
+test('pinned SDK preserves explicit observations with fast planning and pruned screenshots', () => {
+  const history = new ConversationHistory();
+  history.appendMessage({ role: 'user', content: [{type:'image', image:'old-screen'}] });
+  const { parsed } = parseXMLPlanningResponse(
+    '<memory>{"observed":{"model":"iPhone 17 Pro"},"done":["read model"]}</memory>' +
+    '<action-type>Tap</action-type><action-param-json>{"locate":{"bbox":[0,0,10,10]}}</action-param-json>',
+    ['action-type','action-param-json'], {includeThought:false});
+  assert.equal(parsed.thought, undefined);
+  history.appendMemory(parsed.memory);
+  history.appendMessage({role:'user',content:[{type:'image',image:'new-screen'}]});
+  assert.match(JSON.stringify(history.snapshot(1)), /image ignored due to size optimization/);
+  assert.match(history.memoriesToText(), /iPhone 17 Pro/);
+  assert.match(history.memoriesToText(), /read model/);
+  history.reset();
+  assert.equal(history.memoriesToText(), '');
 });
 
 test('stuck taps stop, but changed frames, targets and other actions permit progress', async () => {

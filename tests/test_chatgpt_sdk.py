@@ -45,9 +45,14 @@ class ChatGPTSDKTests(unittest.TestCase):
                     assert 'temperature' not in body
                     if mode in ('act', 'stuck'):
                         plans += 1
+                        assert 'Use compact execution memory.' in json.dumps(body['input'])
+                        if mode == 'act' and plans > 1:
+                            assert 'value-42' in json.dumps(body['input'])
                         content = ('<planning>Tap fixture</planning><action-type>Tap</action-type>'
                                    '<action-param-json>{"locate":{"prompt":"fixture", "bbox":[15,30,45,60]}}</action-param-json>') if mode == 'stuck' or plans <= 7 else '<planning>Done</planning><complete success="true">Done</complete>'
                         if mode == 'act': content = content.replace('[15,30,45,60]', json.dumps([15 + plans * 15, 30, 45 + plans * 15, 60]))
+                        if mode == 'act' and plans == 1:
+                            content = '<memory>{"observed":{"fixture":"value-42"}}</memory>' + content
                     else:
                         content = '<observation>Fixture evidence</observation><data-json>' + json.dumps({'StatementIsTruthy': mode == 'assert-true'}) + '</data-json>'
                     event = {'type': 'response.completed', 'response': {'id': 'fixture', 'status': 'completed',
@@ -88,7 +93,7 @@ class ChatGPTSDKTests(unittest.TestCase):
             outcomes = []
             for mode in ('assert-true', 'assert-false', 'act', 'stuck'):
                 p = subprocess.run(['node', '--import', str(preload), str(WORKER)], cwd=root,
-                    input=json.dumps({'action': 'act' if mode in ('act', 'stuck') else 'assert', 'args': {'text': 'Fixture task'},
+                    input=json.dumps({**({'planning': 'compact'} if mode in ('act', 'stuck') else {}), 'action': 'act' if mode in ('act', 'stuck') else 'assert', 'args': {'text': 'Fixture task'},
                         'host': '127.0.0.1', 'port': port, 'sessionId': 'borrowed', 'reportId': 'oauth-fixture'}),
                     capture_output=True, text=True, timeout=30,
                     env={k: v for k, v in os.environ.items() if not k.startswith(('MIDSCENE_', 'OPENAI_'))})

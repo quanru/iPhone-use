@@ -94,7 +94,7 @@ BATCH_OPS=["tap","swipe","type_text","launch_app","press_button","wait","observe
 SCHEMAS["batch"]=obj({"steps":{"type":"array","minItems":1,"maxItems":20,"items":{"oneOf":[obj({"op":{"type":"string","const":op},"args":SCHEMAS[op]},("op","args")) for op in BATCH_OPS]}}},("steps",))
 SCHEMAS["ready"]["examples"]=[{"recover":True,"screenshot":False}]
 SCHEMAS["screen"]=obj({"action":string("Default open displays the live iPhone sidebar. Pause before password/Face ID takeover; resume only after the user confirms completion.",enum=["open","pause","resume"])})
-SCHEMAS["midscene"]=obj({"action":string(enum=["settings","screenshot","tap","swipe","input","home","launch","record","act","assert","auth_status","auth_login","auth_logout","auth_cancel","models"]),"mode":string(enum=["off","steps","ai"]),"x":num(0,10000),"y":num(0,10000),"end_x":num(0,10000),"end_y":num(0,10000),"text":string(max_length=10000),"passed":BOOL,"report_id":string(max_length=64)},("action",))
+SCHEMAS["midscene"]=obj({"action":string(enum=["settings","screenshot","tap","swipe","input","home","launch","record","act","assert","auth_status","auth_login","auth_logout","auth_cancel","models"]),"mode":string(enum=["off","steps","ai"]),"planning":string(enum=["balanced","compact"]),"x":num(0,10000),"y":num(0,10000),"end_x":num(0,10000),"end_y":num(0,10000),"text":string(max_length=10000),"passed":BOOL,"report_id":string(max_length=64)},("action",))
 SCHEMAS["screen_frame"]=obj({"after_seq":num(0,9007199254740991,"integer"),"last_event_id":num(0,9007199254740991,"integer")})
 SCHEMAS["screen_action"]=obj({"action":string("refresh reconnects the preview stream, home returns the iPhone to its Home screen, screenshot copies a native capture to the Mac clipboard.",enum=["refresh","home","screenshot"])},("action",))
 # Tools the preview App calls itself; the model never sees them.
@@ -117,7 +117,7 @@ DESCRIPTIONS={
  "metrics":"In-process totals without text, app data or images: PUA HTTP time and bytes, tool time, response bytes per tool, and the wait between each response and the next tool request (host, model and user time). reset=true starts a new window."
 }
 DESCRIPTIONS["apps"]="Resolve a real bundle ID by installed-device inventory, bundled verified aliases, or Apple's Search API. Query app name before launch instead of guessing. Store metadata does not prove installation; check installed_verified and publisher/country."
-DESCRIPTIONS["midscene"]="Midscene settings: off/steps/ai, default steps. AI needs consent. Read skill; reuse report_id."
+DESCRIPTIONS["midscene"]="Midscene off/steps/ai; read skill."
 READS={"doctor","observe","find","wait","metrics","apps"}
 READS.update(("screen","screen_frame"))
 DESCRIPTIONS["screen"]="Open or reuse the live iPhone screen in the Codex side panel. No phone actions or UI controls. Pause the preview before password/Face ID user takeover; resume after explicit completion. READY also opens or reuses this view by default."

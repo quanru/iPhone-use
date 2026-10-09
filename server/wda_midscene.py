@@ -21,12 +21,14 @@ FIELDS = {"screenshot": set(), "tap": {"x", "y"},
           "act": {"text"}, "assert": {"text"}}
 
 
-def run(runtime, action, report_id=None, **args):
+def run(runtime, action, report_id=None, planning=None, **args):
     report_id = report_id if report_id is not None else uuid.uuid4().hex
     if not isinstance(report_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", report_id):
         raise WDAError("invalid_arguments", "report_id must contain 1–64 letters, digits, underscores or hyphens.")
     if action not in FIELDS or set(args) != FIELDS[action]:
         raise WDAError("invalid_arguments", "Supply exactly the fields for this action; see the Midscene guide.")
+    if planning is not None and (action != "act" or planning not in ("balanced", "compact")):
+        raise WDAError("invalid_arguments", "Planning is accepted only for act: balanced or compact.")
     if action in ("act", "assert") and not args["text"].strip():
         raise WDAError("invalid_arguments", "AI instructions must not be empty.")
     if action == "input" and any(c in args["text"] for c in "\r\n\t"):
@@ -46,6 +48,8 @@ def run(runtime, action, report_id=None, **args):
     session_id = runtime.client.ensure_session()
     request = {"action": action, "args": args, "host": runtime.client.host,
                "port": runtime.client.port, "sessionId": session_id, "reportId": report_id}
+    if planning is not None:
+        request["planning"] = planning
     details = {"action_complete": False, "report_id": report_id}
     # OAuth-only AI mode must not inherit any provider credentials/configuration.
     env = {k: v for k, v in os.environ.items() if not k.startswith(("MIDSCENE_", "OPENAI_"))}
@@ -65,6 +69,8 @@ def run(runtime, action, report_id=None, **args):
             details["reason"] = result["error"]
         if isinstance(result.get("model"), str):
             details["model"] = result["model"]
+        if isinstance(result.get("model_requests"), list):
+            details["model_requests"] = result["model_requests"]
         encoded = result.pop("screenshot", None)
         if encoded:
             data = base64.b64decode(encoded.split(",", 1)[-1], validate=True)

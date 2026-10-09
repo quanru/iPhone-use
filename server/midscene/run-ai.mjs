@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { ChatGPTAuth, AuthError } from './chatgpt-auth.mjs';
 import { TapProgressGuard } from './ai-budget.mjs';
 import { createChatGPTClient } from './chatgpt-client.mjs';
+import { compactPlanningContext } from './compact-planning.mjs';
 
 process.umask(0o077);
 console.log = (...args) => process.stderr.write(`${format(...args)}\n`);
@@ -14,6 +15,7 @@ for (const key of Object.keys(process.env)) {
 }
 let device, agent, request, result = { ok: false }, screenshot, viewport;
 let inferenceError, deadline, deadlineTimer, completionSummary;
+const modelRequests = [];
 const progress = new TapProgressGuard();
 const parent = process.ppid;
 // Exit on parent loss rather than continuing to mutate an unowned device.
@@ -24,6 +26,9 @@ try {
   if (!['act', 'assert'].includes(request.action) || !/^[A-Za-z0-9_-]{1,64}$/.test(request.reportId) ||
       typeof request.args?.text !== 'string' || !request.args.text.trim() || request.args.text.length > 10000)
     throw new AuthError('invalid_ai_request');
+  if (request.planning !== undefined && (!['balanced', 'compact'].includes(request.planning) || request.action !== 'act'))
+    throw new AuthError('invalid_ai_request');
+  const compact = request.planning === 'compact';
   const controller = new AbortController();
   deadline = controller.signal;
   deadlineTimer = setTimeout(() => controller.abort(new AuthError('midscene_budget_exhausted')), request.action === 'act' ? 300000 : 150000);
@@ -73,13 +78,13 @@ try {
     reportFileName: `iphone-use-${request.reportId}`,
     reportAttributes: { 'data-group-id': `iphone-use-${request.reportId}` },
     cache: false, replanningCycleLimit: 24, waitAfterAction: 600,
-    aiActContext: 'Only perform the requested task. If authentication, password, PIN, OTP, or biometric confirmation is required, stop and report failure for user takeover. Never invent credentials. Do not repeat a tap on an unchanged screen; move obscured targets into view. Input must use typeOnly and single-line text; no implicit submit. Before finishing, observe the requested final state. In your completion message, state the concrete facts observed and any conditions that remain unverified; do not claim success merely because an action was dispatched.',
+    aiActContext: (compact ? compactPlanningContext : '') + 'Only perform the requested task. If authentication, password, PIN, OTP, or biometric confirmation is required, stop and report failure for user takeover. Never invent credentials. Do not repeat a tap on an unchanged screen; move obscured targets into view. Input must use typeOnly and single-line text; no implicit submit. Before finishing, observe the requested final state. In your completion message, state the concrete facts observed and any conditions that remain unverified; do not claim success merely because an action was dispatched.',
     modelConfig: { MIDSCENE_MODEL_NAME: model, MIDSCENE_MODEL_FAMILY: /^gpt-6/.test(model) ? 'gpt-6' : 'gpt-5',
       MIDSCENE_MODEL_API_KEY: 'oauth-managed-by-iphone-use', MIDSCENE_MODEL_BASE_URL: 'http://127.0.0.1:1',
       MIDSCENE_MODEL_TIMEOUT: 60000, MIDSCENE_MODEL_RETRY_COUNT: 0 },
-    createOpenAIClient: createChatGPTClient(auth, { signal: deadline, onError: error => { inferenceError = error instanceof AuthError ? error.code : 'chatgpt_inference_failed'; } }),
+    createOpenAIClient: createChatGPTClient(auth, { signal: deadline, onMetrics: metrics => modelRequests.push(metrics), onError: error => { inferenceError = error instanceof AuthError ? error.code : 'chatgpt_inference_failed'; } }),
   });
-  if (request.action === 'act') completionSummary = await agent.aiAct(request.args.text, { abortSignal: deadline });
+  if (request.action === 'act') completionSummary = await agent.aiAct(request.args.text, { abortSignal: deadline, effort: compact ? 'fast' : 'balance' });
   else await agent.aiAssert(request.args.text);
   deadline.throwIfAborted();
   result = { ...result, ok: true, action_complete: true, decision_source: 'chatgpt_oauth' };
@@ -111,5 +116,6 @@ try {
     };
   }
   clearInterval(watchdog);
+  if (process.env.IPHONE_USE_MODEL_METRICS === '1') result.model_requests = modelRequests;
 }
 process.stdout.write(JSON.stringify(result), () => process.exit(result.ok ? 0 : 1));
