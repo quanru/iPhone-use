@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT / 'server'))
 from iphone_use import Runtime
 from wda_client import WDAError
 import wda_midscene
+import wda_mode
 
 
 class MidsceneTests(unittest.TestCase):
@@ -21,6 +22,7 @@ class MidsceneTests(unittest.TestCase):
         self.root = Path(self.directory.name).resolve()
         self.runtime = Runtime(self.root, base_url='http://127.0.0.1:18123')
         self.addCleanup(self.runtime.close)
+        wda_mode.settings(self.root, "steps")
         self.runtime.screen = Mock()
         self.runtime.screen.paused.return_value = False
         self.runtime.client = Mock(host='127.0.0.1', port=18123, session_id='borrowed-session')
@@ -133,6 +135,7 @@ class MidsceneTests(unittest.TestCase):
         self.assertFalse(any('node_modules' in name for name in files))
 
     def test_ai_requires_consent_before_phone_access_and_never_uses_api_key(self):
+        self.call("settings", mode="ai")
         with patch.object(wda_midscene.wda_chatgpt, 'run', return_value={'authorized': False}):
             with self.assertRaises(WDAError) as error:
                 self.call('assert', text='Expected page')
@@ -155,3 +158,51 @@ class MidsceneTests(unittest.TestCase):
             with self.assertRaises(WDAError):
                 self.call('auth_login', report_id='unexpected')
         self.runtime.client.request.assert_not_called()
+
+    def test_preference_defaults_off_and_blocks_even_if_authorized(self):
+        (self.root / 'execution-mode.json').unlink()
+        self.assertEqual(self.call('settings')['mode'], 'off')
+        with self.assertRaises(WDAError) as error:
+            self.call()
+        self.assertEqual(error.exception.code, 'midscene_disabled')
+        self.runtime.client.request.assert_not_called()
+        self.process.assert_not_called()
+        with patch.object(wda_midscene.wda_chatgpt, 'run', return_value={'ok': True, 'authorized': True}):
+            self.call('auth_status')
+        self.assertEqual(self.call('settings')['mode'], 'off')
+
+    def test_steps_blocks_ai_before_auth_or_device_and_settings_persist(self):
+        self.assertEqual(self.call('settings', mode='steps')['mode'], 'steps')
+        with patch.object(wda_midscene.wda_chatgpt, 'run') as auth:
+            with self.assertRaises(WDAError) as error:
+                self.call('act', text='Open About')
+            self.assertEqual(error.exception.code, 'midscene_ai_disabled')
+            auth.assert_not_called()
+        self.runtime.client.request.assert_not_called()
+        self.call('settings', mode='ai')
+        other = Runtime(self.root, base_url='http://127.0.0.1:18123')
+        try:
+            self.assertEqual(other.call('pua_midscene', {'action': 'settings'})['mode'], 'ai')
+        finally:
+            other.close()
+        self.assertEqual((self.root / 'execution-mode.json').stat().st_mode & 0o777, 0o600)
+        account = self.root / 'chatgpt/account.json'
+        account.parent.mkdir(); account.write_text('fixture-preserve')
+        self.call('settings', mode='off')
+        self.assertEqual(account.read_text(), 'fixture-preserve')
+
+    def test_mode_change_is_locked_and_rejects_extra_fields(self):
+        with (self.root / 'operation.lock').open('a') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            self.assertEqual(self.call('settings')['mode'], 'steps')
+            with self.assertRaises(WDAError) as error:
+                self.call('settings', mode='off')
+            self.assertEqual(error.exception.code, 'device_busy')
+        for args in ({'mode': 'unknown'}, {'text': 'unexpected'}, {'report_id': 'unused'}):
+            with self.assertRaises(WDAError):
+                self.call('settings', **args)
+        (self.root / 'execution-mode.json').write_text('{broken')
+        with self.assertRaises(WDAError) as error:
+            self.call()
+        self.assertEqual(error.exception.code, 'invalid_execution_mode')
+        self.assertEqual(self.call('settings', mode='off')['mode'], 'off')

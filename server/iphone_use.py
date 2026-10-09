@@ -25,6 +25,7 @@ from wda_screen import ScreenHub
 import wda_image
 import wda_midscene
 import wda_chatgpt
+import wda_mode
 
 PUAError=WDAError
 VERSION="0.3.6"
@@ -93,7 +94,7 @@ BATCH_OPS=["tap","swipe","type_text","launch_app","press_button","wait","observe
 SCHEMAS["batch"]=obj({"steps":{"type":"array","minItems":1,"maxItems":20,"items":{"oneOf":[obj({"op":{"type":"string","const":op},"args":SCHEMAS[op]},("op","args")) for op in BATCH_OPS]}}},("steps",))
 SCHEMAS["ready"]["examples"]=[{"recover":True,"screenshot":False}]
 SCHEMAS["screen"]=obj({"action":string("Default open displays the live iPhone sidebar. Pause before password/Face ID takeover; resume only after the user confirms completion.",enum=["open","pause","resume"])})
-SCHEMAS["midscene"]=obj({"action":string(enum=["screenshot","tap","swipe","input","home","launch","record","act","assert","auth_status","auth_login","auth_logout","auth_cancel","models"]),"x":num(0,10000),"y":num(0,10000),"end_x":num(0,10000),"end_y":num(0,10000),"text":string(max_length=10000),"passed":BOOL,"report_id":string(max_length=64)},("action",))
+SCHEMAS["midscene"]=obj({"action":string(enum=["settings","screenshot","tap","swipe","input","home","launch","record","act","assert","auth_status","auth_login","auth_logout","auth_cancel","models"]),"mode":string(enum=["off","steps","ai"]),"x":num(0,10000),"y":num(0,10000),"end_x":num(0,10000),"end_y":num(0,10000),"text":string(max_length=10000),"passed":BOOL,"report_id":string(max_length=64)},("action",))
 SCHEMAS["screen_frame"]=obj({"after_seq":num(0,9007199254740991,"integer"),"last_event_id":num(0,9007199254740991,"integer")})
 SCHEMAS["screen_action"]=obj({"action":string("refresh reconnects the preview stream, home returns the iPhone to its Home screen, screenshot copies a native capture to the Mac clipboard.",enum=["refresh","home","screenshot"])},("action",))
 # Tools the preview App calls itself; the model never sees them.
@@ -116,7 +117,7 @@ DESCRIPTIONS={
  "metrics":"In-process totals without text, app data or images: PUA HTTP time and bytes, tool time, response bytes per tool, and the wait between each response and the next tool request (host, model and user time). reset=true starts a new window."
 }
 DESCRIPTIONS["apps"]="Resolve a real bundle ID by installed-device inventory, bundled verified aliases, or Apple's Search API. Query app name before launch instead of guessing. Store metadata does not prove installation; check installed_verified and publisher/country."
-DESCRIPTIONS["midscene"]="Phone control and reports. act/assert use authorized ChatGPT inference; auth_login opens consent. Read the skill for fields. Reuse report_id."
+DESCRIPTIONS["midscene"]="Midscene settings: off/steps/ai, default off. AI needs consent. Read skill; reuse report_id."
 READS={"doctor","observe","find","wait","metrics","apps"}
 READS.update(("screen","screen_frame"))
 DESCRIPTIONS["screen"]="Open or reuse the live iPhone screen in the Codex side panel. No phone actions or UI controls. Pause the preview before password/Face ID user takeover; resume after explicit completion. READY also opens or reuses this view by default."
@@ -289,6 +290,9 @@ class Runtime:
         # sharing this runtime, and share only this plugin's session identity.
         if not isinstance(name,str) or not name.startswith("pua_") or name[4:] not in SCHEMAS:raise WDAError("unknown_tool","Unknown PUA tool.")
         validate(args,SCHEMAS[name[4:]]);validate_semantics(name[4:],args)
+        if name=="pua_midscene" and args["action"]=="settings":
+            if set(args)-{"action","mode"}:raise WDAError("invalid_arguments","Settings accept only action and mode.")
+            return wda_mode.settings(self.state_dir,args.get("mode"))
         if name=="pua_midscene" and args["action"] in wda_chatgpt.ACTIONS:
             if set(args)!={"action"}:raise WDAError("invalid_arguments","Authorization actions accept only action.")
             return wda_chatgpt.run(self.state_dir,args["action"])
@@ -597,14 +601,14 @@ def tool_result(runtime,params):
 
 INSTRUCTIONS=(
  "PUA means Phone Use Agent; all iPhone Use tools use the pua_ prefix. "
- "Default to pua_midscene after READY. With ChatGPT authorization use act/assert; otherwise host-driven steps. auth_login requires official browser consent. Never copy host credentials. Reuse report_id; read the skill. PUA controls are explicit fallback only. "
+ "Read pua_midscene settings once per task: off (default) uses PUA; steps uses Midscene explicit actions; ai uses act/assert with separate consent. Change mode only on user request, never from auth status. Read skill; reuse report_id. "
  "Read iphone-use-setup before setup and iphone-use for tasks. First phone task in a new chat: pua_ready(recover=true, screenshot=false); only ready=true permits phone tasks, then reuse READY's observation and the healthy channel. "
  "If READY fails with pua_unreachable/not_ready, continue initialization rather than end the task: pua_setup(action=status), reuse an active start/recovery job or start once from the existing config/build, poll that job until service.ready=true, then READY again. Missing config/source/build uses the setup skill. "
  "recover=true is runtime recovery, not cold startup; for state=recovering follow its setup job until the service is ready, then READY again. Honor explicit diagnostic/no-start/no-restart instructions. "
  "The live iPhone screen opens or reuses the same side panel with READY; setup/recovery and preview pause/resume keep the existing panel. Use pua_screen to reopen a closed panel, not to refresh an already open one. Opening it does not prove readiness or require an extra user confirmation, and widget frames never substitute for a model observation or final verification. "
  "Results are one compact JSON text. Tree nodes give type without the XCUIElementType prefix and rect=[x,y,width,height] in iPhone points; an omitted name equals label, an omitted value repeats the text, omitted enabled/visible/in_viewport are true. A listed node is not proven hittable: fixed headers and overlays can cover it. "
  "A screenshot arrives as an image in the same result; through functions.exec forward each image block with image(block) and text blocks with text(block.text), never text(the whole result) or base64. If image forwarding is unavailable, use view_image on image.path or error.observation.image.path. It is scaled for reading: image pixels x image.pixel_to_point [x,y] = iPhone points. Standalone observation uses mode, mutation output uses observe. "
- "The following selector/batch/observe hints apply only to explicit PUA fallback; default tasks use pua_midscene. "
+ "The following selector/batch/observe hints apply to off mode and explicit PUA fallback. "
  "Selectors copy label/name/value/type from fresh nodes; use label_contains for long or changing labels. Matches nested at one place, or with only one on screen, resolve by themselves. "
  "Screenshot inspection is the fallback for abnormal UI state: selector/focus failure, unresolved scroll search, no scroll progress, changed/blocked scroll context, input mismatch or a failed page expectation. Inspect the attached screenshot FIRST before any further mutation; if no usable image is attached take one pua_observe(mode=screenshot). Decide from visible state whether to stop, handle a popup, change the region/direction, tap by x/y or continue missing work. scroll_find never chains another swipe after an unresolved post-scroll query. tap_point/candidates locate elements but do not prove they are unobstructed; close a visible popup before tapping a covered background target. For input tap the visible editable field, then type_text with text and no selector. If a coordinate tap or focus failed, choose a new target from a fresh screenshot rather than repeat the same point or hand routine UI trouble to the user. Do not try other selector spellings or read the tree again first. Correct schema/channel/authentication errors by their own recovery; never blindly replay uncertain actions. Resolve unknown bundle IDs with pua_apps. "
  "Execute routine actions optimistically: observe=none and verify=false are defaults, verified=false/verification_deferred=true is normal and does not require a separate verification call. If the next decision needs the resulting page, request observe=tree/both in the action and inspect previous success while planning that next step. "

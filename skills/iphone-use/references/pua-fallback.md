@@ -1,6 +1,6 @@
-# Explicit PUA fallback
+# PUA control and fallback
 
-Only use these controls when the user requests PUA or after explaining why Midscene cannot handle the required operation. Never replay an uncertain action when switching.
+Use these controls by default in off mode. In steps/ai mode, use them when the user requests PUA or after explaining why Midscene cannot handle the required operation. Never replay an uncertain action when switching.
 
 ## 按下一步需要选择观察
 

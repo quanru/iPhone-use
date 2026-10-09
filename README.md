@@ -111,7 +111,19 @@ sh scripts/install.sh
 
 屏幕预览在同一聊天中复用已有 widget。底部提供刷新、主屏幕和截图按钮；无图像时保留黑色屏幕的 iPhone 外壳，屏幕内仅显示对应状态图标，顶部显示连接或暂停状态。预览供用户观看，模型定位仍以工具返回的实际图像或控件为依据。
 
-### 默认使用 Midscene
+### 可选 Midscene：从报告到自动执行
+
+使用上只有一个 **Midscene 开关**，默认关闭；另有一个按需开启的高级选项 **AI 自动执行**。直接在聊天中切换，设置会跨对话保存，用户不需要理解内部模式值：
+
+| 你的指令 | 设置 | 收益与影响 |
+|---|---|---|
+| “关闭 Midscene” | 关闭（默认） | 保留原有操作流程，不生成 Midscene 报告 |
+| “开启 Midscene” | 开启 | 当前聊天模型决策；记录操作、耗时及点击前后截图，方便回放和排查；不新增内部模型请求 |
+| “开启 Midscene AI 自动执行” | 开启高级选项 | 真正的 aiAct 多步执行和 aiAssert 视觉核验；需要单独授权，会产生额外模型调用 |
+
+推荐先正常使用，需要复盘时试用单步报告，再按需开启 AI。登录不会自动开启 AI；关闭不注销账号或删除报告。可以说“仅这次开启操作报告”，任务结束后恢复原模式。安装包仍包含 SDK 支持，开关控制执行路径。AI 模式不保证更快、更省用量或必然成功。
+
+工具入口：`pua_midscene(action="settings")` 查看；附加 `mode="off" / "steps" / "ai"` 切换。
 
 `pua_midscene` 通过 Midscene iOS SDK 操作手机，并按 `report_id` 累积 HTML 报告。使用 `auth_login` 在 OpenAI 官方页面授权后，`act` / `assert` 调用真实的 aiAct / aiAssert，使用获准的 ChatGPT 套餐额度，无需 API Key。模型由账号可用列表选择，不继承当前聊天的模型和历史。未授权时保留当前聊天模型决策的明确动作模式。安装、授权与参数说明见 [Midscene 接入指南](skills/iphone-use/references/midscene.md)。
 
@@ -140,7 +152,7 @@ sh scripts/install.sh
 | `pua_type_text`、`pua_wait` | Unicode 输入与有界等待 |
 | `pua_batch`、`pua_scroll_find`、`pua_collect_list` | 组合动作、滚动查找与列表采集 |
 | `pua_screen`、`pua_metrics` | 预览开关与有界耗时统计 |
-| `pua_midscene` | 默认 Midscene 单步动作、截图和宿主验收报告 |
+| `pua_midscene` | Midscene 开关、可选操作及报告 |
 
 界面异常时先返回截图，再由模型判断下一步：滚动查找一次最多滑一次，仍找不到可点击目标就暂停；遮挡、滚动无进展、输入不符或预期页面未出现也走截图兜底。已有截图直接复用，不自动继续盲滑或重放操作。
 

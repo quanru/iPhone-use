@@ -125,6 +125,10 @@ These changes reduce duplicate requests and model round trips. Overall task spee
 
 There are 18 model tools and 2 additional widget-only tools.
 
+The **Midscene switch** defaults to off, retaining original WDA/PUA control. **AI automation** is a separate advanced option. The three internal mode values are not three switches. Ask "Enable Midscene" for **steps**: replayable reports without additional internal model calls. Ask "Enable Midscene AI" for **ai**: real aiAct/aiAssert, requiring separate ChatGPT consent and model usage. "Disable Midscene" returns to off. Read/change the persistent preference with `pua_midscene(action="settings")`, optionally adding `mode="off"`, `"steps"` or `"ai"`. Signing in never changes the mode; disabling retains authorization and existing reports. Installation still includes SDK support.
+
+Start with ordinary control, try step reports when reviewing or troubleshooting, then opt into AI when multi-step execution or visual assertions are useful. A requested one-task trial restores the previous mode afterward. Neither speed nor lower usage is guaranteed.
+
 `pua_midscene` controls the phone through Midscene and accumulates reports by `report_id`. After `auth_login` and user consent on OpenAI's official page, `act` / `assert` call real aiAct / aiAssert using authorized ChatGPT plan usage, without an API key. The model comes from the account's catalog; it does not inherit the current chat's model or history. Explicit host-driven actions remain available without sign-in. Both modes reuse the WDA session and operation lock. See the [Midscene integration guide](skills/iphone-use/references/midscene.md).
 
 | Tools | Purpose |
@@ -136,7 +140,7 @@ There are 18 model tools and 2 additional widget-only tools.
 | `pua_type_text`, `pua_wait` | Unicode input and bounded waits |
 | `pua_batch`, `pua_scroll_find`, `pua_collect_list` | Compound actions, search, collection |
 | `pua_screen`, `pua_metrics` | Preview controls and bounded timing statistics |
-| `pua_midscene` | Default Midscene explicit actions, screenshots, and host verification reports |
+| `pua_midscene` | Execution preference, optional Midscene actions and reports |
 
 Abnormal UI states return a screenshot for the model to inspect before choosing another action. Scroll search performs at most one swipe per call and stops if the target remains unreachable; occlusion, unproven scroll progress, input mismatch, and failed page expectations use the same fallback. Existing screenshots are reused, without automatic extra gestures or action replay.
 

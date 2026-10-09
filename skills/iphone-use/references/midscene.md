@@ -4,7 +4,9 @@ Explicit device actions use the current chat model's decisions without a second 
 
 ## Continue with ChatGPT
 
-Check `pua_midscene(action="auth_status")` once when selecting the task mode. If authorized, prefer `act` for a bounded task and `assert` for its observable final condition. If not authorized, offer sign-in when the user requests AI mode; do not start consent implicitly for a user who only selected explicit device control.
+First read `pua_midscene(action="settings")`. The persistent mode defaults to `off`; set `mode="steps"` for explicit actions/reports or `mode="ai"` for AI tasks only on user request. Settings work without Node, phone access or OAuth. Mode changes serialize with device operations. Authorization never changes the mode. Disabling retains authorization and reports; upgrades without an explicit preference stay off.
+
+Only in ai mode, check auth_status and use act/assert after consent. In steps mode, do not invoke AI or initiate sign-in. In off mode, use original PUA controls.
 
 | action | Extra fields | Result |
 | --- | --- | --- |

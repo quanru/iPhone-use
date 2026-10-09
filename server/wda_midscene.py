@@ -11,6 +11,7 @@ import uuid
 from wda_client import WDAError
 import wda_image
 import wda_chatgpt
+import wda_mode
 
 WORKER = Path(__file__).parent / "midscene" / "run.mjs"
 MUTATIONS = {"tap", "swipe", "input", "home", "launch", "act"}
@@ -32,6 +33,7 @@ def run(runtime, action, report_id=None, **args):
         raise WDAError("invalid_arguments", "Input accepts single-line text only; no implicit submit.")
     if action == "launch" and not re.fullmatch(r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+", args["text"]):
         raise WDAError("invalid_arguments", "Launch requires an installed app bundle ID in text.")
+    wda_mode.require(runtime.state_dir, action)
     node = shutil.which("node")
     if not node or not (WORKER.parent / "node_modules/@midscene/ios/package.json").is_file():
         raise WDAError("midscene_not_installed", "Install Node.js 22.19+ and run npm ci --prefix <plugin-root>/server/midscene.")
