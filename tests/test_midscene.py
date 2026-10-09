@@ -100,6 +100,29 @@ class MidsceneTests(unittest.TestCase):
         self.runtime.client.reapply_settings.assert_called_once_with()
         self.assertEqual(json.loads((self.root / "session.json").read_text())["session_id"], "borrowed-session")
 
+    def test_report_id_generated_or_forwarded_and_invalid_ids_rejected(self):
+        self.configure()
+        result = self.call("query")
+        self.assertRegex(result["report_id"], r"^[a-f0-9]{32}$")
+        self.assertEqual(json.loads(self.process.call_args.kwargs["input"])["reportId"], result["report_id"])
+        result = self.runtime.call("pua_midscene", {"action": "query", "prompt": "Read", "report_id": "task-1"})
+        self.assertEqual(result["report_id"], "task-1")
+        self.process.reset_mock()
+        self.runtime.client.request.reset_mock()
+        for invalid in ("../outside", "a/b", "a.b", "汉字", "a" * 65, ""):
+            with self.assertRaises(WDAError):
+                self.runtime.call("pua_midscene", {"action": "query", "prompt": "Read", "report_id": invalid})
+        self.process.assert_not_called()
+        self.runtime.client.request.assert_not_called()
+
+    def test_failure_preserves_report_reference(self):
+        self.configure()
+        self.process.return_value = Mock(returncode=1, stdout='{"ok":false,"report":"/local/report.html"}')
+        with self.assertRaises(WDAError) as error:
+            self.runtime.call("pua_midscene", {"action": "assert", "prompt": "Read", "report_id": "task-1"})
+        self.assertEqual(error.exception.details["report_id"], "task-1")
+        self.assertEqual(error.exception.details["report"], "/local/report.html")
+
     def test_busy_device_refuses_worker(self):
         self.configure()
         with (self.root / "operation.lock").open("a") as lock:

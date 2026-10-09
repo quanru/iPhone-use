@@ -54,3 +54,17 @@ The agent receives iOS-specific guidance to scroll partially obscured targets in
 The worker uses the existing PUA endpoint and session under PUA's cross-process operation lock. It does not install/start PUA or create a second session. Cleanup detaches the borrowed session; PUA reapplies its session settings on the next request. Do not run a separate Midscene CLI against the phone concurrently.
 
 `timeout_seconds` is an integer from 10 to 600. A timeout kills the worker, but actions already sent may have taken effect. `midscene_failed` for an `act` is uncertain: inspect a fresh `pua_observe(mode="screenshot")` and continue only the remaining work. Do not replay the task or silently switch to another controller. A failed assertion also returns `midscene_failed`; it does not prove the condition holds.
+
+## One report per task
+
+Omit `report_id` on the first `pua_midscene` call. The result includes a generated `report_id` and the local HTML `report` path. Pass that same ID on subsequent calls in the task, including queries and assertions:
+
+```json
+{"action":"assert","prompt":"The expected page is visible","report_id":"ID_RETURNED_BY_FIRST_CALL"}
+```
+
+The SDK appends executions to the same report using its CLI-style report filename and `data-group-id` reuse mechanism, including across worker restarts. IDs contain 1–64 ASCII letters, digits, underscores or hyphens. Use a new ID for each independent task; reuse requires the same private state directory. This ID groups reports only: it is not the device session ID and does not deduplicate or retry actions.
+
+A failed assertion can still append a failed execution; errors include the ID and report path when the worker returned one. Preflight failures produce no execution. A killed or timed-out worker may leave only a partial report. A report's existence does not prove success. Ordinary PUA operations do not appear in it.
+
+When the user explicitly requests Midscene, call `pua_midscene` after READY and report its actual ID and report path. If unavailable, explain the blocker instead of silently substituting ordinary PUA tools.

@@ -3,6 +3,7 @@ import base64
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
+import re
 from pathlib import Path
 import struct
 import subprocess
@@ -83,19 +84,42 @@ class MidsceneSDKTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             process = subprocess.run(["node", str(WORKER)], input=json.dumps({"action": "query",
                 "prompt": "Return the screen title as a string", "host": "127.0.0.1", "port": port,
-                "sessionId": "borrowed"}), text=True, capture_output=True, cwd=directory, env=env, timeout=60)
+                "sessionId": "borrowed", "reportId": "shared-task"}), text=True, capture_output=True, cwd=directory, env=env, timeout=60)
             self.assertEqual(process.returncode, 0, process.stderr)
             result = json.loads(process.stdout)
             self.assertEqual(result["result"], "fixture screen")
             self.assertTrue(Path(result["report"]).is_file(), result)
+            report = Path(result["report"])
+            def executions_in_report():
+                dumps = re.findall(r'<script type="midscene_web_dump" data-group-id=[^>]*>(.*?)</script>', report.read_text(), re.S)
+                return {execution["id"]: execution for dump in dumps
+                        for execution in json.loads(dump)["executions"]}
+            original = executions_in_report()
+            self.assertEqual(len(original), 1)
             for truthy in (True, False):
                 model_value = {"StatementIsTruthy": truthy}
                 process = subprocess.run(["node", str(WORKER)], input=json.dumps({"action": "assert",
                     "prompt": "The expected title is visible", "host": "127.0.0.1", "port": port,
-                    "sessionId": "borrowed"}), text=True, capture_output=True, cwd=directory, env=env, timeout=60)
+                    "sessionId": "borrowed", "reportId": "shared-task"}), text=True, capture_output=True, cwd=directory, env=env, timeout=60)
                 self.assertEqual(process.returncode, 0 if truthy else 1, process.stderr)
-                self.assertEqual(json.loads(process.stdout)["ok"], truthy)
-        self.assertEqual(len(models), 3)
+                outcome = json.loads(process.stdout)
+                self.assertEqual(outcome["ok"], truthy)
+                self.assertEqual(outcome["report"], str(report))
+                self.assertTrue(original.keys() <= executions_in_report().keys())
+            dumps = re.findall(r'<script type="midscene_web_dump" data-group-id=[^>]*>(.*?)</script>', report.read_text(), re.S)
+            executions = {execution["id"]: execution for dump in dumps
+                          for execution in json.loads(dump)["executions"]}
+            self.assertEqual(len(executions), 3)
+            self.assertEqual(len(list(Path(directory).rglob("*.html"))), 1)
+            model_value = "separate task"
+            process = subprocess.run(["node", str(WORKER)], input=json.dumps({"action": "query",
+                "prompt": "Return the title", "host": "127.0.0.1", "port": port,
+                "sessionId": "borrowed", "reportId": "other-task"}), text=True,
+                capture_output=True, cwd=directory, env=env, timeout=60)
+            self.assertEqual(process.returncode, 0, process.stderr)
+            self.assertNotEqual(json.loads(process.stdout)["report"], str(report))
+            self.assertEqual(len(executions_in_report()), 3)
+        self.assertEqual(len(models), 4)
         self.assertIn("data:image/", json.dumps(models))
         self.assertIn(("GET", "/session/borrowed/screenshot"), requests)
         self.assertNotIn(("POST", "/session"), requests)

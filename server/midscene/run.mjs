@@ -11,6 +11,8 @@ let result;
 let exitCode = 0;
 try {
   const request = JSON.parse(readFileSync(0, 'utf8'));
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(request.reportId ?? '')) throw new Error('Invalid report ID');
+  const reportFileName = `iphone-use-${request.reportId}`;
   const { IOSDevice, IOSAgent } = await import('@midscene/ios');
   device = new IOSDevice({
     wdaHost: request.host,
@@ -19,6 +21,8 @@ try {
   });
   await device.connect();
   agent = new IOSAgent(device, {
+    reportFileName,
+    reportAttributes: { 'data-group-id': reportFileName },
     aiContexts: {
       aiAct: 'iOS may show list rows through translucent fixed search bars, tab bars, or the keyboard. '
         + 'A visible label behind an overlay is not tappable. Scroll the list to move the entire target '
@@ -41,6 +45,6 @@ try {
   // The SDK detaches borrowed sessions without deleting them.
   if (agent) await agent.destroy().catch(() => {});
   else if (device) await device.destroy().catch(() => {});
-  if (result.ok && agent) result.report = agent.reportFile ?? null;
+  if (agent) result.report = agent.reportFile ?? null;
 }
 process.stdout.write(JSON.stringify(result), () => process.exit(exitCode));

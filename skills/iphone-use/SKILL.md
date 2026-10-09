@@ -1,6 +1,6 @@
 ---
 name: iphone-use
-description: 通过 PUA（Phone Use Agent）MCP 工具高效操作真实 iPhone；新对话默认先初始化并取得 READY，服务未启动时沿 setup 启动流程继续。默认乐观执行导航、点击、输入和滚动，在下一步观察时顺带判断进度，只对关键最终结果显式验收；指导 App 查找、列表采集、手机屏幕侧边栏及密码或 Face ID 认证接管。
+description: 支持可选 Midscene 视觉操作、查询、断言与按任务 ID 累积 HTML 报告；用户指定 Midscene 时使用 pua_midscene。通过 PUA（Phone Use Agent）MCP 工具高效操作真实 iPhone；新对话默认先初始化并取得 READY，服务未启动时沿 setup 启动流程继续。默认乐观执行导航、点击、输入和滚动，在下一步观察时顺带判断进度，只对关键最终结果显式验收；指导 App 查找、列表采集、手机屏幕侧边栏及密码或 Face ID 认证接管。
 ---
 
 # 用 PUA 完成 iPhone 任务
@@ -74,6 +74,8 @@ for (const block of result.content ?? []) {
 ## 可选 Midscene
 
 用户启用 Midscene 后，可用 `pua_midscene` 按截图执行自然语言任务、查询页面或断言可见状态。先确认 READY，再按 [Midscene 配置与使用](references/midscene.md) 调用。默认关闭；未配置时继续使用现有 PUA 工具。认证、发送授权和不确定动作的处理规则同样适用，失败后先观察，不重放整个任务。
+
+用户明确要求使用或验证 Midscene 时，READY 后必须调用 `pua_midscene`，不能用普通 PUA 操作代替并声称已使用 Midscene。工具不可用或配置缺失时说明原因。同一任务第一次调用不传 `report_id`，保存返回的 ID，后续 Midscene 调用都传这个 ID，使步骤追加到同一 HTML 报告；新任务使用新 ID。最终给出实际使用的工具、`report_id` 和 `report` 路径。普通 PUA 操作不计入 Midscene 报告。
 
 ## 输入与发送
 
