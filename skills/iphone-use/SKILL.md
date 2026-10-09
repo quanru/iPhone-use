@@ -51,7 +51,7 @@ App 实际要求密码、PIN、验证码、Face ID / Touch ID，或手机需要�
 
 ## Midscene 执行与报告（仅 steps / ai）
 
-ai 模式且已授权时，在 READY 后用 `act, text="具体任务和约束"` 执行，查看截图，再用 `assert, text="可观察的完成条件"` 核验；保持同一 report_id。以下单步规则仅用于 steps 模式。
+ai 模式且已授权时，在 READY 后用 `act, text="具体任务、约束和可观察的完成条件"` 执行；保持同一 report_id。优先复用返回的 `completion.summary`、`image` 和 `report`：说明覆盖完成条件且与返回截图一致时，直接汇报，不再固定调用 screenshot、observe 或 assert。说明为空、只说“完成”、缺少关键条件、与截图冲突或工具失败时，才针对缺口补查；不重放整个任务。用户明确要求独立视觉断言时仍使用 assert。completion 是执行模型的判断，不能称为独立 aiAssert。以下单步规则仅用于 steps 模式。
 
 READY 后读取 [Midscene 操作参数](references/midscene.md)。先调用 `pua_midscene(action="screenshot")`，保存返回的 `report_id`。同一任务后续每次调用都传这个 ID，新任务使用新 ID。每次只执行一个动作，查看返回截图后再决定下一步。查询页面和断言由当前聊天模型根据截图完成；最终使用 `action="record", text="实际观察及结论", passed=true/false` 记录验收。不得为了得到成功报告而将未确认的结果记为通过。
 

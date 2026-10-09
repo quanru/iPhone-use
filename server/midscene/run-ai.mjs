@@ -13,7 +13,7 @@ for (const key of Object.keys(process.env)) {
   if (key.startsWith('MIDSCENE_') || key.startsWith('OPENAI_')) delete process.env[key];
 }
 let device, agent, request, result = { ok: false }, screenshot, viewport;
-let inferenceError, deadline, deadlineTimer;
+let inferenceError, deadline, deadlineTimer, completionSummary;
 const progress = new TapProgressGuard();
 const parent = process.ppid;
 // Exit on parent loss rather than continuing to mutate an unowned device.
@@ -73,13 +73,13 @@ try {
     reportFileName: `iphone-use-${request.reportId}`,
     reportAttributes: { 'data-group-id': `iphone-use-${request.reportId}` },
     cache: false, replanningCycleLimit: 24, waitAfterAction: 600,
-    aiActContext: 'Only perform the requested task. If authentication, password, PIN, OTP, or biometric confirmation is required, stop and report failure for user takeover. Never invent credentials. Do not repeat a tap on an unchanged screen; move obscured targets into view. Input must use typeOnly and single-line text; no implicit submit.',
+    aiActContext: 'Only perform the requested task. If authentication, password, PIN, OTP, or biometric confirmation is required, stop and report failure for user takeover. Never invent credentials. Do not repeat a tap on an unchanged screen; move obscured targets into view. Input must use typeOnly and single-line text; no implicit submit. Before finishing, observe the requested final state. In your completion message, state the concrete facts observed and any conditions that remain unverified; do not claim success merely because an action was dispatched.',
     modelConfig: { MIDSCENE_MODEL_NAME: model, MIDSCENE_MODEL_FAMILY: /^gpt-6/.test(model) ? 'gpt-6' : 'gpt-5',
       MIDSCENE_MODEL_API_KEY: 'oauth-managed-by-iphone-use', MIDSCENE_MODEL_BASE_URL: 'http://127.0.0.1:1',
       MIDSCENE_MODEL_TIMEOUT: 60000, MIDSCENE_MODEL_RETRY_COUNT: 0 },
     createOpenAIClient: createChatGPTClient(auth, { signal: deadline, onError: error => { inferenceError = error instanceof AuthError ? error.code : 'chatgpt_inference_failed'; } }),
   });
-  if (request.action === 'act') await agent.aiAct(request.args.text, { abortSignal: deadline });
+  if (request.action === 'act') completionSummary = await agent.aiAct(request.args.text, { abortSignal: deadline });
   else await agent.aiAssert(request.args.text);
   deadline.throwIfAborted();
   result = { ...result, ok: true, action_complete: true, decision_source: 'chatgpt_oauth' };
@@ -103,6 +103,13 @@ try {
     catch { result.ok = false; result.error = 'report_finalize_failed'; }
   } else if (device) await device.destroy().catch(() => {});
   if (screenshot && viewport) Object.assign(result, { screenshot, viewport });
+  if (result.ok && request?.action === 'act') {
+    result.completion = {
+      source: 'midscene_aiAct',
+      summary: typeof completionSummary === 'string' ? completionSummary : null,
+      independent_assertion: false,
+    };
+  }
   clearInterval(watchdog);
 }
 process.stdout.write(JSON.stringify(result), () => process.exit(result.ok ? 0 : 1));
