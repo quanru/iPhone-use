@@ -2,6 +2,8 @@
 
 Midscene adds screenshot-based natural-language actions, extraction, and assertions through `pua_midscene`. It is disabled by default. Existing PUA tools keep working without its SDK or model credentials.
 
+Installing this plugin does not require another ChatGPT sign-in. When ChatGPT or Codex uses the existing PUA screenshot and gesture tools, the host model makes the decisions. `pua_midscene` instead runs a separate model-driven loop inside Midscene: this integration does not inherit the host's model configuration, conversation, or subscription credentials. Qwen is only one model option; configure a compatible provider for Midscene, or leave it disabled and use the existing PUA tools.
+
 ## Configure
 
 Use Node.js 22.19 or newer (Node.js 24 is tested). In the installed plugin directory, install the pinned optional SDK:
