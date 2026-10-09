@@ -15,7 +15,7 @@ Only in ai mode, check auth_status and use act/assert after consent. In steps mo
 | auth_cancel | none | Cancel pending consent; then auth_login can start a fresh attempt |
 | auth_logout | none | Attempts revocation and removes local tokens; reports whether remote revocation was confirmed |
 | models | none | Current account's available model catalog |
-| act | text | Real aiAct, at most 6 planning cycles and a 180-second worker deadline |
+| act | text | Real aiAct, at most 24 planning cycles, a 300-second AI deadline, and a 330-second hard worker deadline |
 | assert | text | Real aiAssert; a false condition returns an error and native assertion report |
 
 The user completes OpenAI login and consent themselves. Do not inspect authentication pages, copy codes, read stored tokens, or use Codex/ChatGPT credential files. Sign-in expires after ten minutes. Await the user's completion, then check auth_status; a pending URL is not authorization. Failed or denied consent preserves the existing account. Credentials are owner-only files in `<state-dir>/chatgpt`, with serialized rotating-token refresh. This implementation supports one registered account per state directory; sign-out retains its registration for reauthorization.
@@ -68,3 +68,5 @@ Each explicit-action response contains decision_source=chat_host, report_id, rep
 Reports contain screenshots and task content. Keep them local unless the user authorizes sharing. Do not run an independent CLI against the same phone concurrently.
 
 A returned `report` path is an actual report even when no AI inference was performed. Include its link in the final response; do not describe it as missing merely because aiAct/aiAssert was not used. Reports made by older plugin versions may contain only screenshot logs; those historical logs are not relabeled as native actions.
+
+AI stops with `midscene_budget_exhausted`, `midscene_cycle_limit`, or `midscene_no_progress` when its budget or progress guard trips. The progress guard blocks a third consecutive tap at the same resolved point on a byte-identical screenshot; changing frames and other actions still rely on the cycle/time limits. A stopped task is incomplete, even if its last action may have succeeded. Inspect the returned screenshot/report, verify saved state, then continue only the unfinished work with the same report_id. Never replay creation or submission blindly. The larger budget permits complex tasks; it does not reduce model latency.

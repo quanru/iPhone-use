@@ -12,7 +12,7 @@ export function toResponseInput(messages) {
     }) }));
 }
 
-export function createChatGPTClient(auth, { Client = OpenAI, onError = () => {} } = {}) {
+export function createChatGPTClient(auth, { Client = OpenAI, signal, onError = () => {} } = {}) {
   const complete = async (body, options = {}) => {
     const token = await auth.accessToken();
     const client = new Client({ apiKey: token, baseURL: 'https://api.openai.com/v1',
@@ -21,7 +21,7 @@ export function createChatGPTClient(auth, { Client = OpenAI, onError = () => {} 
     const outputItems = new Map();
     try {
       const stream = await client.responses.create({ model: body.model,
-        input: toResponseInput(body.messages), store: false, stream: true }, { signal: options.signal });
+        input: toResponseInput(body.messages), store: false, stream: true }, { signal: signal && options.signal ? AbortSignal.any([signal, options.signal]) : signal ?? options.signal });
       for await (const event of stream) {
         if (event.type === 'response.completed') completed = event.response;
         else if (event.type === 'response.output_item.done') outputItems.set(event.output_index, event.item);

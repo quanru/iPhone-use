@@ -152,3 +152,38 @@ test('Responses adapter sends images, requires completion, drops unsupported fie
   const broken = await createChatGPTClient({ accessToken: async () => 'x' }, { Client: Incomplete })();
   await assert.rejects(broken.chat.completions.create({ messages: [] }), /chatgpt_incomplete_stream/);
 });
+
+test('worker budget reaches the Responses request and cancels inference', async () => {
+  const controller = new AbortController();
+  let requestSignal;
+  class Client {
+    responses = { create: async (_body, options) => {
+      requestSignal = options.signal;
+      return new Promise((_, reject) => {
+        options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true });
+      });
+    } };
+  }
+  const factory = createChatGPTClient({ accessToken: async () => 'fixture' }, { Client, signal: controller.signal });
+  const client = await factory();
+  const pending = client.chat.completions.create({ model: 'fixture', messages: [] });
+  await new Promise(resolve => setImmediate(resolve));
+  controller.abort();
+  await assert.rejects(pending);
+  assert.equal(requestSignal.aborted, true);
+});
+
+test('stuck taps stop, but changed frames, targets and other actions permit progress', async () => {
+  const { TapProgressGuard } = await import('../server/midscene/ai-budget.mjs');
+  const guard = new TapProgressGuard();
+  const tap = { locate: { center: [10, 20] } };
+  guard.observe('frame-1');
+  guard.beforeAction('Tap', tap);
+  guard.beforeAction('Tap', tap);
+  assert.throws(() => guard.beforeAction('Tap', tap), { code: 'midscene_no_progress' });
+  guard.observe('frame-2');
+  guard.beforeAction('Tap', tap);
+  guard.beforeAction('Tap', { locate: { center: [20, 30] } });
+  guard.beforeAction('Input', { value: 'hello' });
+  guard.beforeAction('Tap', tap);
+});

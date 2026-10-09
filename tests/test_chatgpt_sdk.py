@@ -43,10 +43,11 @@ class ChatGPTSDKTests(unittest.TestCase):
                     assert body['stream'] is True and body['store'] is False
                     assert body['input'][0]['role'] == 'developer'
                     assert 'temperature' not in body
-                    if mode == 'act':
+                    if mode in ('act', 'stuck'):
                         plans += 1
                         content = ('<planning>Tap fixture</planning><action-type>Tap</action-type>'
-                                   '<action-param-json>{"locate":{"prompt":"fixture", "bbox":[15,30,45,60]}}</action-param-json>') if plans == 1 else '<planning>Done</planning><complete success="true">Done</complete>'
+                                   '<action-param-json>{"locate":{"prompt":"fixture", "bbox":[15,30,45,60]}}</action-param-json>') if mode == 'stuck' or plans <= 7 else '<planning>Done</planning><complete success="true">Done</complete>'
+                        if mode == 'act': content = content.replace('[15,30,45,60]', json.dumps([15 + plans * 15, 30, 45 + plans * 15, 60]))
                     else:
                         content = '<observation>Fixture evidence</observation><data-json>' + json.dumps({'StatementIsTruthy': mode == 'assert-true'}) + '</data-json>'
                     event = {'type': 'response.completed', 'response': {'id': 'fixture', 'status': 'completed',
@@ -85,14 +86,14 @@ class ChatGPTSDKTests(unittest.TestCase):
                 f'url=s.replace("https://api.openai.com", "http://127.0.0.1:{port}");'
                 'return original(url,opts);};')
             outcomes = []
-            for mode in ('assert-true', 'assert-false', 'act'):
+            for mode in ('assert-true', 'assert-false', 'act', 'stuck'):
                 p = subprocess.run(['node', '--import', str(preload), str(WORKER)], cwd=root,
-                    input=json.dumps({'action': 'act' if mode == 'act' else 'assert', 'args': {'text': 'Fixture task'},
+                    input=json.dumps({'action': 'act' if mode in ('act', 'stuck') else 'assert', 'args': {'text': 'Fixture task'},
                         'host': '127.0.0.1', 'port': port, 'sessionId': 'borrowed', 'reportId': 'oauth-fixture'}),
                     capture_output=True, text=True, timeout=30,
                     env={k: v for k, v in os.environ.items() if not k.startswith(('MIDSCENE_', 'OPENAI_'))})
                 result = json.loads(p.stdout)
-                self.assertEqual(p.returncode, 1 if mode == 'assert-false' else 0, str(result) + p.stderr)
+                self.assertEqual(p.returncode, 1 if mode in ('assert-false', 'stuck') else 0, str(result) + p.stderr)
                 self.assertEqual(result['model'], 'gpt-fixture')
                 outcomes.append(result)
             html = Path(outcomes[-1]['report']).read_text()
@@ -100,9 +101,10 @@ class ChatGPTSDKTests(unittest.TestCase):
             dumps = re.findall(r'<script type="midscene_web_dump" data-group-id=[^>]*>(.*?)</script>', html, re.S)
             executions = {e['id']: e for dump in dumps for e in json.loads(dump)['executions']}
             tasks = [t for e in executions.values() for t in e['tasks']]
-            self.assertEqual(len(executions), 3)
+            self.assertEqual(len(executions), 4)
             self.assertEqual([t['output'] for t in tasks if t['subType'] == 'Assert'], [True, False])
             self.assertTrue(any(t['type'] == 'Action Space' and t['subType'] == 'Tap' for t in tasks))
             self.assertEqual(outcomes[1]['error'], 'assertion_failed')
-            self.assertEqual(len([r for r in requests if r[1] == '/session/borrowed/wda/tap']), 1)
-            self.assertEqual(len([r for r in requests if r[1] == '/v1/responses']), 4)
+            self.assertEqual(len([r for r in requests if r[1] == '/session/borrowed/wda/tap']), 9)
+            self.assertEqual(outcomes[-1]['error'], 'midscene_no_progress')
+            self.assertGreaterEqual(len([r for r in requests if r[1] == '/v1/responses']), 13)

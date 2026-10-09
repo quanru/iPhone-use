@@ -145,7 +145,7 @@ class MidsceneTests(unittest.TestCase):
                 patch.dict(wda_midscene.os.environ, {'OPENAI_API_KEY': 'must-not-forward'}):
             self.call('act', text='Open About')
         self.assertTrue(self.process.call_args.args[0][1].endswith('run-ai.mjs'))
-        self.assertEqual(self.process.call_args.kwargs['timeout'], 180)
+        self.assertEqual(self.process.call_args.kwargs['timeout'], 330)
         self.assertNotIn('OPENAI_API_KEY', self.process.call_args.kwargs['env'])
         self.assertEqual(len(self.process.call_args.kwargs['pass_fds']), 1)
 

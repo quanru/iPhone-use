@@ -55,7 +55,7 @@ def run(runtime, action, report_id=None, **args):
         process = subprocess.run([node, str(worker)], input=json.dumps(request),
                                  text=True, capture_output=True, env=env,
                                  pass_fds=(lock_fd,) if lock_fd is not None else (),
-                                 cwd=runtime.state_dir, timeout=180 if action in ("act", "assert") else 60)
+                                 cwd=runtime.state_dir, timeout=330 if action == "act" else 180 if action == "assert" else 60)
         result = json.loads(process.stdout)
         if isinstance(result, dict) and isinstance(result.get("report"), str):
             details["report"] = result["report"]
