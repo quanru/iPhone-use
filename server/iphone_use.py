@@ -601,7 +601,7 @@ def tool_result(runtime,params):
 
 INSTRUCTIONS=(
  "PUA means Phone Use Agent; all iPhone Use tools use the pua_ prefix. "
- "Read pua_midscene settings once per task: off uses PUA; steps (default) uses Midscene explicit actions; ai uses act/assert with separate consent. Change mode only on user request, never from auth status. Read skill; reuse report_id. "
+ "Read pua_midscene settings once per task: off uses PUA; steps (default) uses Midscene explicit actions; ai uses act/assert with separate consent. Recommend AI when useful; change mode on acceptance, not auth status. Read skill; reuse report_id. "
  "Read iphone-use-setup before setup and iphone-use for tasks. First phone task in a new chat: pua_ready(recover=true, screenshot=false); only ready=true permits phone tasks, then reuse READY's observation and the healthy channel. "
  "If READY fails with pua_unreachable/not_ready, continue initialization rather than end the task: pua_setup(action=status), reuse an active start/recovery job or start once from the existing config/build, poll that job until service.ready=true, then READY again. Missing config/source/build uses the setup skill. "
  "recover=true is runtime recovery, not cold startup; for state=recovering follow its setup job until the service is ready, then READY again. Honor explicit diagnostic/no-start/no-restart instructions. "

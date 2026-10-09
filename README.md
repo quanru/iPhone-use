@@ -123,6 +123,8 @@ sh scripts/install.sh
 
 正常使用即可积累操作报告，需要复盘时查看，再按需开启 AI。登录不会自动开启 AI；关闭不注销账号或删除报告。此前已关闭的用户可说“仅这次开启操作报告”，任务结束后恢复原模式。安装包仍包含 SDK 支持，开关控制执行路径。AI 模式不保证更快、更省用量或必然成功。
 
+助手会主动判断任务：遇到目标明确的跨页面操作或需要视觉断言的检查，会结合当前任务说明 AI 的具体收益和额外模型用量，提供“本次试用／保持当前方式／以后默认使用”的选择。简单操作直接完成，不插入推荐；断连和登录问题先正常处理。拒绝后本任务不再推荐，未回复也不会自动开启。本次试用结束后恢复原设置，并提供报告供用户评估效果。
+
 工具入口：`pua_midscene(action="settings")` 查看；附加 `mode="off" / "steps" / "ai"` 切换。
 
 `pua_midscene` 通过 Midscene iOS SDK 操作手机，并按 `report_id` 累积 HTML 报告。使用 `auth_login` 在 OpenAI 官方页面授权后，`act` / `assert` 调用真实的 aiAct / aiAssert，使用获准的 ChatGPT 套餐额度，无需 API Key。模型由账号可用列表选择，不继承当前聊天的模型和历史。未授权时保留当前聊天模型决策的明确动作模式。安装、授权与参数说明见 [Midscene 接入指南](skills/iphone-use/references/midscene.md)。
