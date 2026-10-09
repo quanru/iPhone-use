@@ -6,6 +6,7 @@ import { ChatGPTAuth, AuthError } from './chatgpt-auth.mjs';
 import { TapProgressGuard } from './ai-budget.mjs';
 import { createChatGPTClient } from './chatgpt-client.mjs';
 import { compactPlanningContext } from './compact-planning.mjs';
+import { swipeInDevicePoints } from './swipe-coordinates.mjs';
 
 process.umask(0o077);
 console.log = (...args) => process.stderr.write(`${format(...args)}\n`);
@@ -69,7 +70,7 @@ try {
         throw new AuthError('launch_requires_bundle_id');
       if (action.name === 'Swipe' && param.repeat !== undefined && param.repeat !== 1)
         throw new AuthError('unbounded_action');
-      return action.call(param, context);
+      return action.call(action.name === 'Swipe' ? swipeInDevicePoints(param, context) : param, context);
     },
   }));
   await device.connect();

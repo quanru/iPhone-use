@@ -53,6 +53,15 @@ class ChatGPTSDKTests(unittest.TestCase):
                         if mode == 'act': content = content.replace('[15,30,45,60]', json.dumps([15 + plans * 15, 30, 45 + plans * 15, 60]))
                         if mode == 'act' and plans == 1:
                             content = '<memory>{"observed":{"fixture":"value-42"}}</memory>' + content
+                    elif mode == 'swipe':
+                        plans += 1
+                        if plans <= 2:
+                            param = {'start': {'prompt': 'wheel', 'bbox': [30, 60, 60, 90]}, 'duration': 1500}
+                            param.update({'direction': 'down', 'distance': 90} if plans == 1 else
+                                         {'end': {'prompt': 'one row below', 'bbox': [30, 150, 60, 180]}})
+                            content = '<action-type>Swipe</action-type><action-param-json>' + json.dumps(param) + '</action-param-json>'
+                        else:
+                            content = '<complete success="true">Done</complete>'
                     else:
                         content = '<observation>Fixture evidence</observation><data-json>' + json.dumps({'StatementIsTruthy': mode == 'assert-true'}) + '</data-json>'
                     event = {'type': 'response.completed', 'response': {'id': 'fixture', 'status': 'completed',
@@ -91,9 +100,10 @@ class ChatGPTSDKTests(unittest.TestCase):
                 f'url=s.replace("https://api.openai.com", "http://127.0.0.1:{port}");'
                 'return original(url,opts);};')
             outcomes = []
-            for mode in ('assert-true', 'assert-false', 'act', 'stuck'):
+            for mode in ('assert-true', 'assert-false', 'act', 'stuck', 'swipe'):
+                plans = 0
                 p = subprocess.run(['node', '--import', str(preload), str(WORKER)], cwd=root,
-                    input=json.dumps({**({'planning': 'compact'} if mode in ('act', 'stuck') else {}), 'action': 'act' if mode in ('act', 'stuck') else 'assert', 'args': {'text': 'Fixture task'},
+                    input=json.dumps({**({'planning': 'compact'} if mode in ('act', 'stuck') else {}), 'action': 'act' if mode in ('act', 'stuck', 'swipe') else 'assert', 'args': {'text': 'Fixture task'},
                         'host': '127.0.0.1', 'port': port, 'sessionId': 'borrowed', 'reportId': 'oauth-fixture'}),
                     capture_output=True, text=True, timeout=30,
                     env={k: v for k, v in os.environ.items() if not k.startswith(('MIDSCENE_', 'OPENAI_'))})
@@ -110,10 +120,16 @@ class ChatGPTSDKTests(unittest.TestCase):
             dumps = re.findall(r'<script type="midscene_web_dump" data-group-id=[^>]*>(.*?)</script>', html, re.S)
             executions = {e['id']: e for dump in dumps for e in json.loads(dump)['executions']}
             tasks = [t for e in executions.values() for t in e['tasks']]
-            self.assertEqual(len(executions), 4)
+            self.assertEqual(len(executions), 5)
             self.assertEqual([t['output'] for t in tasks if t['subType'] == 'Assert'], [True, False])
             self.assertTrue(any(t['type'] == 'Action Space' and t['subType'] == 'Tap' for t in tasks))
             self.assertEqual(outcomes[1]['error'], 'assertion_failed')
             self.assertEqual(len([r for r in requests if r[1] == '/session/borrowed/wda/tap']), 9)
-            self.assertEqual(outcomes[-1]['error'], 'midscene_no_progress')
+            self.assertEqual(outcomes[3]['error'], 'midscene_no_progress')
             self.assertGreaterEqual(len([r for r in requests if r[1] == '/v1/responses']), 13)
+
+            gestures = [r[2]['actions'][0]['actions'] for r in requests if r[1] == '/session/borrowed/actions']
+            self.assertEqual(len(gestures), 2)
+            # Same 90 screenshot-pixel movement at DPR 3 must reach the same WDA points.
+            endpoints = [[(a['x'], a['y']) for a in gesture if a['type'] == 'pointerMove'] for gesture in gestures]
+            self.assertEqual(endpoints, [[(15, 25), (15, 55)], [(15, 25), (15, 55)]])
