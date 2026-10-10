@@ -103,7 +103,7 @@ class ChatGPTSDKTests(unittest.TestCase):
             for mode in ('assert-true', 'assert-false', 'act', 'stuck', 'swipe'):
                 plans = 0
                 p = subprocess.run(['node', '--import', str(preload), str(WORKER)], cwd=root,
-                    input=json.dumps({**({'planning': 'compact'} if mode in ('act', 'stuck') else {}), 'action': 'act' if mode in ('act', 'stuck', 'swipe') else 'assert', 'args': {'text': 'Fixture task'},
+                    input=json.dumps({**({'planning': 'compact'} if mode == 'stuck' else {}), 'action': 'act' if mode in ('act', 'stuck', 'swipe') else 'assert', 'args': {'text': 'Fixture task'},
                         'host': '127.0.0.1', 'port': port, 'sessionId': 'borrowed', 'reportId': 'oauth-fixture'}),
                     capture_output=True, text=True, timeout=30,
                     env={k: v for k, v in os.environ.items() if not k.startswith(('MIDSCENE_', 'OPENAI_'))})

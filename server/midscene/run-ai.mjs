@@ -29,7 +29,7 @@ try {
     throw new AuthError('invalid_ai_request');
   if (request.planning !== undefined && (!['balanced', 'compact'].includes(request.planning) || request.action !== 'act'))
     throw new AuthError('invalid_ai_request');
-  const compact = request.planning === 'compact';
+  const compact = request.action === 'act' && request.planning !== 'balanced';
   const controller = new AbortController();
   deadline = controller.signal;
   deadlineTimer = setTimeout(() => controller.abort(new AuthError('midscene_budget_exhausted')), request.action === 'act' ? 300000 : 150000);

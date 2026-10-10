@@ -16,7 +16,7 @@ mkdirSync(root, {recursive:true,mode:0o700});
 const resume = process.argv.includes('--resume');
 const orderArg = process.argv.find(arg => arg.startsWith('--order='));
 const order = orderArg ? orderArg.slice(8).split(',') : resume ? JSON.parse(readFileSync(join(root,'protocol.json'),'utf8')).order : ['steps','balanced','compact','compact','balanced','steps'];
-if (!order.length || order.some(mode => !['steps','balanced','compact'].includes(mode))) throw new Error('Invalid benchmark order');
+if (!order.length || order.some(mode => !['steps','balanced','compact','default'].includes(mode))) throw new Error('Invalid benchmark order');
 if (existsSync(join(root,'results.json')) && !resume) throw new Error('Use a fresh output directory or --resume');
 const fixture = async (...args) => JSON.parse((await exec('python3',[join(repo,'scripts/calendar-benchmark-fixture.py'),...args],{timeout:60000})).stdout);
 const auth = new ChatGPTAuth(join(process.env.HOME,'.local/share/iphone-use/chatgpt'));
@@ -63,7 +63,7 @@ try {
       };
       try{
         if(mode!=='steps'){
-          const result=await call({action:'act',planning:mode,text:task});phase.summary=result.completion?.summary;
+          const result=await call({action:'act',...(mode === 'default' ? {} : {planning:mode}),text:task});phase.summary=result.completion?.summary;
         }else{
           const client=await createChatGPTClient(auth,{signal:controller.signal,onMetrics:m=>{phase.model_requests.push(m);log({type:'model',...m});}})();
           const history=[];let obs=await call({action:'screenshot'});
