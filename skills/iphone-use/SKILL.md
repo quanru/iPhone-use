@@ -11,7 +11,7 @@ description: 操作真实 iPhone，默认开启 Midscene 单步动作与报告�
 
 - `off`：使用 [PUA 操作](references/pua-fallback.md)，不查授权，不生成 Midscene 报告。
 - `steps`（默认）：当前聊天模型看图决策，Midscene 执行明确动作并记录报告；即使已授权，也不使用 act/assert。
-- `ai`：读取 [操作与授权](references/midscene.md)，检查 auth_status，授权后使用 act/assert。未授权时说明单独授权和额外用量，由用户在官方页面完成；不复制宿主凭据。
+- `ai`：读取 [操作与授权](references/midscene.md)，检查 auth_status，授权后使用 act/assert/wait。未授权时说明单独授权和额外用量，由用户在官方页面完成；不复制宿主凭据。
 
 “开启 Midscene”选 steps；“开启 AI 自动执行”选 ai；“关闭 AI 自动执行”选 steps；“关闭 Midscene”选 off。授权与模式独立，登录不改变模式；关闭保留登录和报告。新安装或升级未设置偏好时使用 steps，不从授权推断开启 AI；已保存的 off 或 ai 保持不变。正在执行时等待完成再切换，不重放不确定动作。
 
@@ -37,7 +37,7 @@ description: 操作真实 iPhone，默认开启 Midscene 单步动作与报告�
 
 ## READY 与认证
 
-正常任务在本对话首次使用手机时，默认调用 `pua_ready(recover=true, screenshot=false)`；文字任务保留 status / session / tree / viewport / 解锁检查，无需额外截图。已有本对话 READY 且通道未失效则直接复用，不为每步重验。`recover=false` 仅用于用户明确禁止重启或明确要求只读诊断，不能因谨慎主动设置或自动覆盖用户限制。
+本对话首次使用先调用 `pua_setup(action="status")`，复用已就绪服务或活动工作；缺少服务时按已有配置启动一次。start 最多等待 20 秒，未就绪时用 `status(job_id, wait_seconds=20)` 继续查询，随后调用 `pua_ready(recover=true, screenshot=false)`。只有 ready=true 才能执行手机任务；已健康初始化的通道直接复用。尊重用户明确的禁止启动或重启指令。
 
 - `ready=true, state="ready"`：通道已可用。off 复用 READY 观察；steps 取一次 Midscene screenshot；ai 按任务调用 act/assert/wait。不额外调用 doctor。
 - `ready=false, state="recovering"` 或 `state="recovery_required"`：没有 error、MCP isError=false，仍不表示手机可操作。按 [启动与恢复](references/startup.md) 查询同一工作或按用户限制处理。
@@ -60,6 +60,8 @@ READY 后读取 [Midscene 操作参数](references/midscene.md)。先调用 `pua
 `ok` 或 `action_complete` 只表示单次操作完成。完整任务需要确认最终页面和实际结果。失败先查看返回的最新截图，缺失时取一次新的 `screenshot`；不因超时重放动作。用户完成认证后从实际状态继续，不能重放整个任务。steps 报告记录宿主决策，不代表独立 AI 验收；ai 模式的 assert 才是真正的 SDK AI 断言。
 
 最终说明完成结果和未完成项，给出 `report_id` 与 HTML `report` 路径。多个独立进程的记录可累积到同一报告；普通 PUA 调用不计入该报告。保持简短进度，完成所有已授权步骤后再结束。
+
+需要把手机文件传回 Mac 时，参照 [AirDrop 文件传回 Mac](references/airdrop.md)。
 
 ## 安装、连接和回退
 
