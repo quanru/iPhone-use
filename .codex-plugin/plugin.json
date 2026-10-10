@@ -1,6 +1,6 @@
 {
   "name": "iphone-use",
-  "version": "0.3.9",
+  "version": "0.3.10",
   "description": "通过 Midscene 操作 iPhone，由当前聊天模型看图和决策，无需外部模型配置，按任务累积 HTML 报告。",
   "author": {
     "name": "ZHONG XIN"
