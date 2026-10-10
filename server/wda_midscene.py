@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import time
 import uuid
 
 from wda_client import WDAError
@@ -19,6 +20,34 @@ FIELDS = {"screenshot": set(), "tap": {"x", "y"},
           "swipe": {"x", "y", "end_x", "end_y"}, "input": {"text"},
           "home": set(), "launch": {"text"}, "record": {"text", "passed"},
           "act": {"text"}, "assert": {"text"}, "wait": {"text", "timeout_ms"}}
+
+
+def execute_worker(command, *, runtime, action, input, timeout, **options):
+    """Cancel an in-flight worker when another runtime pauses authentication."""
+    process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE, **options)
+    deadline = time.monotonic() + timeout
+    try:
+        while True:
+            if runtime.screen.paused():
+                raise WDAError("preview_paused", "Midscene was cancelled for authentication takeover; inspect state before continuing.",
+                               uncertain=action in MUTATIONS)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise subprocess.TimeoutExpired(command, timeout)
+            try:
+                stdout, stderr = process.communicate(input=input, timeout=min(0.1, remaining))
+                return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+            except subprocess.TimeoutExpired:
+                input = None
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.communicate(timeout=2)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.communicate(timeout=2)
 
 
 def run(runtime, action, report_id=None, planning=None, **args):
@@ -60,8 +89,11 @@ def run(runtime, action, report_id=None, planning=None, **args):
     worker = WORKER.with_name("run-ai.mjs") if action in ("act", "assert", "wait") else WORKER
     lock_fd = getattr(runtime, "operation_lock_fd", None)
     try:
-        process = subprocess.run([node, str(worker)], input=json.dumps(request),
-                                 text=True, capture_output=True, env=env,
+        if action in MUTATIONS:
+            runtime.phone.external_action()
+            runtime._midscene_action_revision += 1
+        process = execute_worker([node, str(worker)], runtime=runtime, action=action, input=json.dumps(request),
+                                 text=True, env=env,
                                  pass_fds=(lock_fd,) if lock_fd is not None else (),
                                  cwd=runtime.state_dir, timeout=330 if action == "act" else 180 if action == "assert" else (args["timeout_ms"] / 1000 + 30) if action == "wait" else 60)
         result = json.loads(process.stdout)
@@ -94,6 +126,12 @@ def run(runtime, action, report_id=None, planning=None, **args):
         if process.returncode or result.get("ok") is not True:
             raise ValueError()
         return {**result, "report_id": report_id}
+    except WDAError as exc:
+        partial = Path(runtime.state_dir) / "midscene_run" / "report" / ("iphone-use-" + report_id + ".html")
+        if partial.is_file():
+            details["report"] = str(partial)
+        exc.details.update(details)
+        raise
     except (subprocess.TimeoutExpired, ValueError, OSError, KeyError, TypeError):
         partial = Path(runtime.state_dir) / "midscene_run" / "report" / ("iphone-use-" + report_id + ".html")
         if partial.is_file():
@@ -102,3 +140,4 @@ def run(runtime, action, report_id=None, planning=None, **args):
                        uncertain=action in MUTATIONS, details=details) from None
     finally:
         runtime.client.reapply_settings()
+        runtime._midscene_revision += 1

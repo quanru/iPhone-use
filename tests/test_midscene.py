@@ -3,6 +3,8 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import time
+import threading
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
@@ -13,6 +15,8 @@ from iphone_use import Runtime
 from wda_client import WDAError
 import wda_midscene
 import wda_mode
+
+ORIGINAL_EXECUTE_WORKER=wda_midscene.execute_worker
 
 
 class MidsceneTests(unittest.TestCase):
@@ -35,11 +39,53 @@ class MidsceneTests(unittest.TestCase):
         self.addCleanup(patch.stopall)
         patch.object(wda_midscene, 'WORKER', worker).start()
         patch.object(wda_midscene.shutil, 'which', return_value='/usr/bin/node').start()
-        self.process = patch.object(wda_midscene.subprocess, 'run', return_value=Mock(
+        self.process = patch.object(wda_midscene, 'execute_worker', return_value=Mock(
             returncode=0, stdout='{"ok":true}')).start()
 
     def call(self, action='screenshot', **args):
         return self.runtime.call('pua_midscene', {'action': action, **args})
+
+    def test_midscene_invalidates_input_on_success_and_uncertain_failure(self):
+        for fails in (False, True):
+            self.runtime.phone.pending_input={'token': 'old', 'mark': self.runtime.phone.accepted_actions, 'created': time.monotonic()}
+            mark=self.runtime.phone.accepted_actions
+            self.process.return_value=Mock(returncode=int(fails),stdout=json.dumps({'ok': not fails}))
+            if fails:
+                with self.assertRaises(WDAError):self.call('tap',x=1,y=1)
+            else:self.call('tap',x=1,y=1)
+            self.assertIsNone(self.runtime.phone.pending_input)
+            with self.assertRaises(WDAError) as expired:self.runtime.phone.continue_input('old')
+            self.assertEqual(expired.exception.code,'input_continuation_expired')
+            self.assertEqual(self.runtime.phone.accepted_actions,mark+1)
+
+    def test_warm_runtime_adopts_settings_and_action_invalidation(self):
+        other=Runtime(self.root,base_url=self.runtime.base_url)
+        self.addCleanup(other.close)
+        other.screen=Mock();other.screen.paused.return_value=False
+        other.client=Mock(host='127.0.0.1',port=18123,session_id='borrowed-session')
+        other.client.request.return_value={'value':False}
+        other.client.ensure_session.return_value='borrowed-session'
+        other.phone.pending_input={'token':'old'}
+        self.call('tap',x=1,y=1)
+        with patch.object(other,'_call',return_value={'ok':True}):other.call('pua_observe',{'mode':'tree'})
+        other.client.reapply_settings.assert_called_once()
+        self.assertIsNone(other.phone.pending_input)
+        self.assertEqual(other._midscene_revision,1)
+        with patch.object(other,'_call',return_value={'ok':True}):other.call('pua_observe',{'mode':'tree'})
+        other.client.reapply_settings.assert_called_once()  # ordinary reads do not resend settings
+
+    def test_worker_cancels_for_cross_runtime_authentication_pause(self):
+        # Exercise the real child-process monitor, not the mocked worker entry.
+        worker=self.root/'slow.py';worker.write_text('import time; time.sleep(20)')
+        event=threading.Event()
+        self.runtime.screen.paused.side_effect=event.is_set
+        timer=threading.Timer(.2,event.set);timer.start();self.addCleanup(timer.cancel)
+        start=time.monotonic()
+        with self.assertRaises(WDAError) as error:
+            ORIGINAL_EXECUTE_WORKER([sys.executable,str(worker)],runtime=self.runtime,action='act',input='{}',timeout=20,text=True,cwd=self.root)
+        self.assertEqual(error.exception.code,'preview_paused')
+        self.assertTrue(error.exception.uncertain)
+        self.assertLess(time.monotonic()-start,2)
 
     def test_default_without_model_configuration_and_legacy_env_not_forwarded(self):
         (self.root / 'midscene.json').write_text('{"enabled":false,"env":{"MIDSCENE_MODEL_API_KEY":"legacy-secret"}}')

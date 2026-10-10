@@ -35,6 +35,11 @@ class PackagingTests(unittest.TestCase):
         cls.stage = cls.root / 'dist/iphone-use'
         cls.archive = next((cls.root / 'dist').glob('*-source.zip'))
 
+    def test_midscene_lock_uses_public_registry(self):
+        lock=json.loads((ROOT/'server/midscene/package-lock.json').read_text())
+        for package in lock['packages'].values():
+            if 'resolved' in package:self.assertTrue(package['resolved'].startswith('https://registry.npmjs.org/'),package['resolved'])
+
     def test_source_and_install_exclude_local_material_without_deleting_it(self):
         with zipfile.ZipFile(self.archive) as archive:
             entries = {Path(name).relative_to('iphone-use').as_posix() for name in archive.namelist()}

@@ -29,8 +29,8 @@ import wda_mode
 from analytics import Analytics
 
 PUAError=WDAError
-VERSION="0.3.8"
-SCREEN_URI="ui://iphone-use/phone-0.3.8.html"
+VERSION="0.3.9"
+SCREEN_URI="ui://iphone-use/phone-0.3.9.html"
 # Codex scopes reuse to the host, chat, server and UI resource. A stable result
 # ID keeps repeated READY/open/pause/resume calls in that chat on one panel,
 # including after the MCP process reconnects; no device identifiers are needed.
@@ -134,8 +134,8 @@ def undocumented(value):
 
 # Every selector has the same fields. pua_find publishes their documentation once; other
 # tools publish the same closed shape with one line pointing there.
-SEL_BRIEF={**undocumented(SEL),"description":"Selector; fields on pua_find.selector."}
-OBS_BRIEF={**undocumented(OBS),"description":"Post-action output for the next decision; default none."}
+SEL_BRIEF={**undocumented(SEL),"description":"Selector; see pua_find.selector."}
+OBS_BRIEF={**undocumented(OBS),"description":"Next-step output; default none."}
 
 
 def published_schema(name):
@@ -274,6 +274,8 @@ class Runtime:
         self.base_url=base_url or os.environ.get("WDA_URL") or configured_url or "http://127.0.0.1:18100"
         self.client=WDAClient(self.base_url)
         self.phone=PhoneController(self.client,self.state_dir)
+        self._midscene_revision=0
+        self._midscene_action_revision=0
         self.setup_manager=SetupManager(self.state_dir,self.base_url)
         self.apps=AppCatalog(self.state_dir,self.setup_manager)
         self.screen=ScreenHub(self.state_dir)
@@ -334,7 +336,14 @@ class Runtime:
                     try:
                         cached=json.loads(cache_path.read_text())
                         sid=cached.get("session_id","")
-                        if cached.get("url")==self.base_url and isinstance(sid,str) and re.fullmatch(r"[A-Za-z0-9-]{1,128}",sid):self.client.session_id=sid
+                        if cached.get("url")==self.base_url and isinstance(sid,str) and re.fullmatch(r"[A-Za-z0-9-]{1,128}",sid):
+                            revision=cached.get("midscene_revision",0)
+                            action_revision=cached.get("midscene_action_revision",0)
+                            if any(type(value) is not int or value<0 for value in (revision,action_revision)):raise ValueError()
+                            if revision!=self._midscene_revision:self.client.reapply_settings()
+                            if action_revision!=self._midscene_action_revision:self.phone.external_action()
+                            self._midscene_revision,self._midscene_action_revision=revision,action_revision
+                            self.client.session_id=sid
                     except (ValueError,OSError,AttributeError):pass
                 return self._call(name,args)
             finally:
@@ -343,7 +352,7 @@ class Runtime:
                     task_temp=self.state_dir/("session-"+str(os.getpid())+".tmp")
                     try:
                         fd=os.open(task_temp,os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600)
-                        with os.fdopen(fd,"w") as stream:json.dump({"url":self.base_url,"session_id":sid},stream)
+                        with os.fdopen(fd,"w") as stream:json.dump({"url":self.base_url,"session_id":sid,"midscene_revision":self._midscene_revision,"midscene_action_revision":self._midscene_action_revision},stream)
                         os.replace(task_temp,cache_path)
                     finally:
                         if task_temp.exists():task_temp.unlink()
