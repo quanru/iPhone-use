@@ -24,15 +24,19 @@ const watchdog = setInterval(() => { if (process.ppid !== parent) process.exit(1
 watchdog.unref();
 try {
   request = JSON.parse(readFileSync(0, 'utf8'));
-  if (!['act', 'assert'].includes(request.action) || !/^[A-Za-z0-9_-]{1,64}$/.test(request.reportId) ||
+  if (!['act', 'assert', 'wait'].includes(request.action) || !/^[A-Za-z0-9_-]{1,64}$/.test(request.reportId) ||
       typeof request.args?.text !== 'string' || !request.args.text.trim() || request.args.text.length > 10000)
     throw new AuthError('invalid_ai_request');
   if (request.planning !== undefined && (!['balanced', 'compact'].includes(request.planning) || request.action !== 'act'))
     throw new AuthError('invalid_ai_request');
+  const waitTimeout = request.args.timeout_ms ?? 15000;
+  if ((request.action !== 'wait' && request.args.timeout_ms !== undefined) ||
+      !Number.isInteger(waitTimeout) || waitTimeout < 1000 || waitTimeout > 60000)
+    throw new AuthError('invalid_ai_request');
   const compact = request.action === 'act' && request.planning !== 'balanced';
   const controller = new AbortController();
   deadline = controller.signal;
-  deadlineTimer = setTimeout(() => controller.abort(new AuthError('midscene_budget_exhausted')), request.action === 'act' ? 300000 : 150000);
+  deadlineTimer = setTimeout(() => controller.abort(new AuthError(request.action === 'wait' ? 'wait_timeout' : 'midscene_budget_exhausted')), request.action === 'act' ? 300000 : request.action === 'wait' ? waitTimeout : 150000);
   deadlineTimer.unref();
   const auth = new ChatGPTAuth(join(process.cwd(), 'chatgpt'));
   const models = await auth.models();
@@ -57,15 +61,15 @@ try {
   const allowed = new Set(['Tap', 'Swipe', 'Scroll', 'Input', 'IOSHomeButton', 'Launch']);
   device.actionSpace = () => actions().filter(action => allowed.has(action.name)).map(action => ({
     ...action,
-    description: action.name === 'Input' ? 'Append single-line text. Always use mode typeOnly. Never enter credentials or submit.' : action.description,
+    description: action.name === 'Input' ? 'Single-line input: replace overwrites the target field, clear empties it (value must be empty), typeOnly appends. Choose the mode matching the requested edit. Never enter credentials or submit.' : action.description,
     call: async (param, context) => {
       deadline.throwIfAborted();
       await guard();
       deadline.throwIfAborted();
       try { progress.beforeAction(action.name, param); }
       catch (error) { controller.abort(error); throw error; }
-      if (action.name === 'Input' && (param.mode !== 'typeOnly' || /[\r\n\t]/.test(String(param.value)) || String(param.value).length > 10000))
-        throw new AuthError('input_requires_single_line_typeOnly');
+      if (action.name === 'Input' && (!['replace', 'clear', 'typeOnly'].includes(param.mode ?? 'replace') || (param.mode === 'clear' && String(param.value) !== '') || /[\r\n\t]/.test(String(param.value)) || String(param.value).length > 10000))
+        throw new AuthError('invalid_single_line_input');
       if (action.name === 'Launch' && !/^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+$/.test(param.uri))
         throw new AuthError('launch_requires_bundle_id');
       if (action.name === 'Swipe' && param.repeat !== undefined && param.repeat !== 1)
@@ -79,13 +83,14 @@ try {
     reportFileName: `iphone-use-${request.reportId}`,
     reportAttributes: { 'data-group-id': `iphone-use-${request.reportId}` },
     cache: false, replanningCycleLimit: 24, waitAfterAction: 600,
-    aiActContext: (compact ? compactPlanningContext : '') + 'Only perform the requested task. If authentication, password, PIN, OTP, or biometric confirmation is required, stop and report failure for user takeover. Never invent credentials. Do not repeat a tap on an unchanged screen; move obscured targets into view. Input must use typeOnly and single-line text; no implicit submit. Before finishing, observe the requested final state. In your completion message, state the concrete facts observed and any conditions that remain unverified; do not claim success merely because an action was dispatched.',
+    aiActContext: (compact ? compactPlanningContext : '') + 'Only perform the requested task. If authentication, password, PIN, OTP, or biometric confirmation is required, stop and report failure for user takeover. Never invent credentials. Do not repeat a tap on an unchanged screen; move obscured targets into view. Input supports replace, clear (empty value), and typeOnly (append). Replace or clear only the requested field; use single-line text and never implicitly submit. Before finishing, observe the requested final state. In your completion message, state the concrete facts observed and any conditions that remain unverified; do not claim success merely because an action was dispatched.',
     modelConfig: { MIDSCENE_MODEL_NAME: model, MIDSCENE_MODEL_FAMILY: /^gpt-6/.test(model) ? 'gpt-6' : 'gpt-5',
       MIDSCENE_MODEL_API_KEY: 'oauth-managed-by-iphone-use', MIDSCENE_MODEL_BASE_URL: 'http://127.0.0.1:1',
       MIDSCENE_MODEL_TIMEOUT: 60000, MIDSCENE_MODEL_RETRY_COUNT: 0 },
     createOpenAIClient: createChatGPTClient(auth, { signal: deadline, onMetrics: metrics => modelRequests.push(metrics), onError: error => { inferenceError = error instanceof AuthError ? error.code : 'chatgpt_inference_failed'; } }),
   });
   if (request.action === 'act') completionSummary = await agent.aiAct(request.args.text, { abortSignal: deadline, effort: compact ? 'fast' : 'balance' });
+  else if (request.action === 'wait') await agent.aiWaitFor(request.args.text, { timeoutMs: waitTimeout, checkIntervalMs: 1000 });
   else await agent.aiAssert(request.args.text);
   deadline.throwIfAborted();
   result = { ...result, ok: true, action_complete: true, decision_source: 'chatgpt_oauth' };
@@ -96,6 +101,7 @@ try {
   else if (inferenceError) result.error = inferenceError;
   else if (authError instanceof AuthError) result.error = authError.code;
   else if (error.message?.startsWith('Assertion failed:') && !error.cause) result.error = 'assertion_failed';
+  else if (error.message?.includes('waitFor timeout:')) result.error = 'wait_timeout';
   else if (/Replanned \d+ times, exceeding the limit/.test(error.message ?? '')) result.error = 'midscene_cycle_limit';
   else result.error = 'midscene_ai_failed';
 } finally {

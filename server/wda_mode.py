@@ -54,5 +54,5 @@ def require(state_dir, action):
     mode = read(state_dir)
     if mode == 'off':
         raise WDAError('midscene_disabled', 'Midscene is off. Use PUA controls; change mode only at the user\'s request.')
-    if action in ('act', 'assert') and mode != 'ai':
-        raise WDAError('midscene_ai_disabled', 'Single-step mode does not invoke AI. Select ai explicitly before act/assert.')
+    if action in ('act', 'assert', 'wait') and mode != 'ai':
+        raise WDAError('midscene_ai_disabled', 'Single-step mode does not invoke AI. Select ai explicitly before act/assert/wait.')

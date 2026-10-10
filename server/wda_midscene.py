@@ -18,18 +18,22 @@ MUTATIONS = {"tap", "swipe", "input", "home", "launch", "act"}
 FIELDS = {"screenshot": set(), "tap": {"x", "y"},
           "swipe": {"x", "y", "end_x", "end_y"}, "input": {"text"},
           "home": set(), "launch": {"text"}, "record": {"text", "passed"},
-          "act": {"text"}, "assert": {"text"}}
+          "act": {"text"}, "assert": {"text"}, "wait": {"text", "timeout_ms"}}
 
 
 def run(runtime, action, report_id=None, planning=None, **args):
     report_id = report_id if report_id is not None else uuid.uuid4().hex
     if not isinstance(report_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", report_id):
         raise WDAError("invalid_arguments", "report_id must contain 1–64 letters, digits, underscores or hyphens.")
+    if action == "wait":
+        args.setdefault("timeout_ms", 15000)
+        if type(args["timeout_ms"]) is not int or not 1000 <= args["timeout_ms"] <= 60000:
+            raise WDAError("invalid_arguments", "wait timeout_ms must be an integer from 1000 to 60000.")
     if action not in FIELDS or set(args) != FIELDS[action]:
         raise WDAError("invalid_arguments", "Supply exactly the fields for this action; see the Midscene guide.")
     if planning is not None and (action != "act" or planning not in ("balanced", "compact")):
         raise WDAError("invalid_arguments", "Planning is accepted only for act: balanced or compact.")
-    if action in ("act", "assert") and not args["text"].strip():
+    if action in ("act", "assert", "wait") and not args["text"].strip():
         raise WDAError("invalid_arguments", "AI instructions must not be empty.")
     if action == "input" and any(c in args["text"] for c in "\r\n\t"):
         raise WDAError("invalid_arguments", "Input accepts single-line text only; no implicit submit.")
@@ -39,8 +43,8 @@ def run(runtime, action, report_id=None, planning=None, **args):
     node = shutil.which("node")
     if not node or not (WORKER.parent / "node_modules/@midscene/ios/package.json").is_file():
         raise WDAError("midscene_not_installed", "Install Node.js 22.19+ and run npm ci --prefix <plugin-root>/server/midscene.")
-    if action in ("act", "assert") and not wda_chatgpt.run(runtime.state_dir, "auth_status")["authorized"]:
-        raise WDAError("chatgpt_sign_in_required", "Use pua_midscene(action=auth_login) and complete official ChatGPT consent before act/assert.")
+    if action in ("act", "assert", "wait") and not wda_chatgpt.run(runtime.state_dir, "auth_status")["authorized"]:
+        raise WDAError("chatgpt_sign_in_required", "Use pua_midscene(action=auth_login) and complete official ChatGPT consent before act/assert/wait.")
     if runtime.screen.paused():
         raise WDAError("preview_paused", "Resume after the user finishes authentication before using Midscene.", details={"action_executed": False})
     if runtime.client.request("GET", "/wda/locked").get("value") is not False:
@@ -53,13 +57,13 @@ def run(runtime, action, report_id=None, planning=None, **args):
     details = {"action_complete": False, "report_id": report_id}
     # OAuth-only AI mode must not inherit any provider credentials/configuration.
     env = {k: v for k, v in os.environ.items() if not k.startswith(("MIDSCENE_", "OPENAI_"))}
-    worker = WORKER.with_name("run-ai.mjs") if action in ("act", "assert") else WORKER
+    worker = WORKER.with_name("run-ai.mjs") if action in ("act", "assert", "wait") else WORKER
     lock_fd = getattr(runtime, "operation_lock_fd", None)
     try:
         process = subprocess.run([node, str(worker)], input=json.dumps(request),
                                  text=True, capture_output=True, env=env,
                                  pass_fds=(lock_fd,) if lock_fd is not None else (),
-                                 cwd=runtime.state_dir, timeout=330 if action == "act" else 180 if action == "assert" else 60)
+                                 cwd=runtime.state_dir, timeout=330 if action == "act" else 180 if action == "assert" else (args["timeout_ms"] / 1000 + 30) if action == "wait" else 60)
         result = json.loads(process.stdout)
         if isinstance(result, dict) and isinstance(result.get("report"), str):
             details["report"] = result["report"]

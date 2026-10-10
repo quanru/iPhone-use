@@ -196,3 +196,5 @@ python3 scripts/package.py
 感谢 Appium、WebDriverAgent 及相关项目的维护者和贡献者，让真实 iPhone 的自动化操作成为可能。
 
 MIT License。第三方组件说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
+AI 模式还支持 `pua_midscene(action="wait", text="页面条件", timeout_ms=15000)`，使用真正的 `aiWaitFor` 并合并到同一报告；仅在等待异步状态时调用，会产生额外模型请求。aiAct 的输入可按任务选择替换、清空或追加，仍限单行且不自动提交。默认单步模式和 Scroll 参数不变。

@@ -71,6 +71,32 @@ class MidsceneTests(unittest.TestCase):
             self.call('act', text='Edit an event')
             self.assertNotIn('planning', json.loads(self.process.call_args.kwargs['input']))
 
+    def test_wait_uses_ai_worker_and_bounded_timeout(self):
+        with self.assertRaises(WDAError) as error:
+            self.call('wait', text='Ready')
+        self.assertEqual(error.exception.code, 'midscene_ai_disabled')
+        self.runtime.client.request.assert_not_called()
+        wda_mode.settings(self.root, 'ai')
+        with patch.object(wda_midscene.wda_chatgpt, 'run', return_value={'authorized': True}):
+            for timeout in (15000, 1000, 60000):
+                self.call('wait', text='Ready', **({} if timeout == 15000 else {'timeout_ms': timeout}))
+                self.assertTrue(self.process.call_args.args[0][1].endswith('run-ai.mjs'))
+                self.assertEqual(json.loads(self.process.call_args.kwargs['input'])['args']['timeout_ms'], timeout)
+            self.process.return_value = Mock(returncode=1, stdout='{"ok":false,"error":"wait_timeout"}')
+            with self.assertRaises(WDAError) as error:
+                self.call('wait', text='Ready')
+            self.assertFalse(error.exception.uncertain)
+            self.assertEqual(error.exception.details['reason'], 'wait_timeout')
+
+    def test_wait_invalid_arguments_never_contact_phone(self):
+        for args in ({'text': ''}, {'text': 'Ready', 'timeout_ms': 999},
+                     {'text': 'Ready', 'timeout_ms': 60001}, {'text': 'Ready', 'timeout_ms': True},
+                     {'text': 'Ready', 'planning': 'compact'}, {'text': 'Ready', 'x': 1}):
+            with self.subTest(args=args), self.assertRaises(WDAError):
+                self.call('wait', **args)
+        self.runtime.client.request.assert_not_called()
+        self.process.assert_not_called()
+
     def test_missing_dependency_without_phone_access(self):
         (wda_midscene.WORKER.parent / 'node_modules/@midscene/ios/package.json').unlink()
         with self.assertRaises(WDAError) as error:

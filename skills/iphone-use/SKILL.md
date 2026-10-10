@@ -39,7 +39,7 @@ description: 操作真实 iPhone，默认开启 Midscene 单步动作与报告�
 
 正常任务在本对话首次使用手机时，默认调用 `pua_ready(recover=true, screenshot=false)`；文字任务保留 status / session / tree / viewport / 解锁检查，无需额外截图。已有本对话 READY 且通道未失效则直接复用，不为每步重验。`recover=false` 仅用于用户明确禁止重启或明确要求只读诊断，不能因谨慎主动设置或自动覆盖用户限制。
 
-- `ready=true, state="ready"`：通道已可用。off 复用 READY 观察；steps 取一次 Midscene screenshot；ai 按任务调用 act/assert。不额外调用 doctor。
+- `ready=true, state="ready"`：通道已可用。off 复用 READY 观察；steps 取一次 Midscene screenshot；ai 按任务调用 act/assert/wait。不额外调用 doctor。
 - `ready=false, state="recovering"` 或 `state="recovery_required"`：没有 error、MCP isError=false，仍不表示手机可操作。按 [启动与恢复](references/startup.md) 查询同一工作或按用户限制处理。
 - READY 返回 `pua_unreachable`、连接拒绝、`not_ready` 或明确服务未启动：这是启动分支，不是整个任务失败。`recover=true` 不会自动冷启动；调用 `pua_setup(action="status")`，复用活动中的 start / recover 工作，或在已配置且没有活动工作时 start 一次，服务就绪后重验 READY。逐步做法见 [启动与恢复](references/startup.md)，缺少配置 / 源码 / 构建时读取 `iphone-use-setup`。
 
@@ -51,7 +51,7 @@ App 实际要求密码、PIN、验证码、Face ID / Touch ID，或手机需要�
 
 ## Midscene 执行与报告（仅 steps / ai）
 
-ai 模式且已授权时，在 READY 后用 `act, text="具体任务、约束和可观察的完成条件"` 执行；保持同一 report_id。所有 act 任务默认使用 SDK fast 与简短执行记忆；省略 planning 即可，也可显式传 `planning="compact"`。不按任务类型自动改用 balanced；仅在用户明确指定或对照测试时传 `planning="balanced"`。不向用户新增配置问题；失败后先观察现状，不切换规划后重放整个任务。优先复用返回的 `completion.summary`、`image` 和 `report`：说明覆盖完成条件且与返回截图一致时，直接汇报，不再固定调用 screenshot、observe 或 assert。说明为空、只说“完成”、缺少关键条件、与截图冲突或工具失败时，才针对缺口补查；不重放整个任务。用户明确要求独立视觉断言时仍使用 assert。completion 是执行模型的判断，不能称为独立 aiAssert。以下单步规则仅用于 steps 模式。
+ai 模式且已授权时，在 READY 后用 `act, text="具体任务、约束和可观察的完成条件"` 执行；保持同一 report_id。所有 act 任务默认使用 SDK fast 与简短执行记忆；省略 planning 即可，也可显式传 `planning="compact"`。不按任务类型自动改用 balanced；仅在用户明确指定或对照测试时传 `planning="balanced"`。不向用户新增配置问题；失败后先观察现状，不切换规划后重放整个任务。优先复用返回的 `completion.summary`、`image` 和 `report`：说明覆盖完成条件且与返回截图一致时，直接汇报，不再固定调用 screenshot、observe 或 assert。说明为空、只说“完成”、缺少关键条件、与截图冲突或工具失败时，才针对缺口补查；不重放整个任务。用户明确要求独立视觉断言时仍使用 assert。completion 是执行模型的判断，不能称为独立 aiAssert。aiAct 内的输入可用 replace（替换）、clear（清空，value 为空）和 typeOnly（追加），只改任务要求的字段，不自动提交。若任务明确要等待异步页面条件，在已授权的 ai 模式中调用 `action="wait", text="可观察条件", timeout_ms=15000`，沿用同一 report_id；它调用真正的 aiWaitFor，会额外请求模型，不给每步固定追加等待。超时仅表示未在预算内确认条件。以下单步规则仅用于 steps 模式。
 
 READY 后读取 [Midscene 操作参数](references/midscene.md)。先调用 `pua_midscene(action="screenshot")`，保存返回的 `report_id`。同一任务后续每次调用都传这个 ID，新任务使用新 ID。每次只执行一个动作，查看返回截图后再决定下一步。查询页面和断言由当前聊天模型根据截图完成；最终使用 `action="record", text="实际观察及结论", passed=true/false` 记录验收。不得为了得到成功报告而将未确认的结果记为通过。
 

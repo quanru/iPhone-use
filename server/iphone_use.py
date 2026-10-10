@@ -94,7 +94,7 @@ BATCH_OPS=["tap","swipe","type_text","launch_app","press_button","wait","observe
 SCHEMAS["batch"]=obj({"steps":{"type":"array","minItems":1,"maxItems":20,"items":{"oneOf":[obj({"op":{"type":"string","const":op},"args":SCHEMAS[op]},("op","args")) for op in BATCH_OPS]}}},("steps",))
 SCHEMAS["ready"]["examples"]=[{"recover":True,"screenshot":False}]
 SCHEMAS["screen"]=obj({"action":string("Default open displays the live iPhone sidebar. Pause before password/Face ID takeover; resume only after the user confirms completion.",enum=["open","pause","resume"])})
-SCHEMAS["midscene"]=obj({"action":string(enum=["settings","screenshot","tap","swipe","input","home","launch","record","act","assert","auth_status","auth_login","auth_logout","auth_cancel","models"]),"mode":string(enum=["off","steps","ai"]),"planning":string(enum=["balanced","compact"]),"x":num(0,10000),"y":num(0,10000),"end_x":num(0,10000),"end_y":num(0,10000),"text":string(max_length=10000),"passed":BOOL,"report_id":string(max_length=64)},("action",))
+SCHEMAS["midscene"]=obj({"action":string(enum=["settings","screenshot","tap","swipe","input","home","launch","record","act","assert","wait","auth_status","auth_login","auth_logout","auth_cancel","models"]),"mode":string(enum=["off","steps","ai"]),"planning":string(enum=["balanced","compact"]),"x":num(0,10000),"y":num(0,10000),"end_x":num(0,10000),"end_y":num(0,10000),"text":string(max_length=10000),"passed":BOOL,"timeout_ms":num(1000,60000,"integer"),"report_id":string(max_length=64)},("action",))
 SCHEMAS["screen_frame"]=obj({"after_seq":num(0,9007199254740991,"integer"),"last_event_id":num(0,9007199254740991,"integer")})
 SCHEMAS["screen_action"]=obj({"action":string("refresh reconnects the preview stream, home returns the iPhone to its Home screen, screenshot copies a native capture to the Mac clipboard.",enum=["refresh","home","screenshot"])},("action",))
 # Tools the preview App calls itself; the model never sees them.
@@ -133,7 +133,7 @@ def undocumented(value):
 
 # Every selector has the same fields. pua_find publishes their documentation once; other
 # tools publish the same closed shape with one line pointing there.
-SEL_BRIEF={**undocumented(SEL),"description":"Selector; fields as documented on pua_find.selector."}
+SEL_BRIEF={**undocumented(SEL),"description":"Selector; fields on pua_find.selector."}
 OBS_BRIEF={**undocumented(OBS),"description":"Post-action output for the next decision; default none."}
 
 
@@ -601,7 +601,7 @@ def tool_result(runtime,params):
 
 INSTRUCTIONS=(
  "PUA means Phone Use Agent; all iPhone Use tools use the pua_ prefix. "
- "Read pua_midscene settings once per task: off uses PUA; steps (default) uses Midscene explicit actions; ai uses act/assert with separate consent. Recommend AI when useful; change mode on acceptance, not auth status. Read skill; reuse report_id. "
+ "Read pua_midscene settings once per task: off uses PUA; steps (default) uses Midscene explicit actions; ai uses act/assert/wait with separate consent. Recommend AI when useful; change mode on acceptance, not auth status. Read skill; reuse report_id. "
  "Read iphone-use-setup before setup and iphone-use for tasks. First phone task in a new chat: pua_ready(recover=true, screenshot=false); only ready=true permits phone tasks, then reuse READY's observation and the healthy channel. "
  "If READY fails with pua_unreachable/not_ready, continue initialization rather than end the task: pua_setup(action=status), reuse an active start/recovery job or start once from the existing config/build, poll that job until service.ready=true, then READY again. Missing config/source/build uses the setup skill. "
  "recover=true is runtime recovery, not cold startup; for state=recovering follow its setup job until the service is ready, then READY again. Honor explicit diagnostic/no-start/no-restart instructions. "

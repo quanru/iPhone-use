@@ -177,3 +177,5 @@ This project relies on the [Appium](https://github.com/appium/appium) ecosystem 
 Thanks to the maintainers and contributors of Appium, WebDriverAgent, and related projects for making real iPhone automation possible.
 
 MIT License. See [third-party notices](THIRD_PARTY_NOTICES.md).
+
+In authorized AI mode, `pua_midscene(action="wait", text="Visible condition", timeout_ms=15000)` uses real `aiWaitFor` and appends to the same report ID. Use it only for asynchronous state; each check invokes the model. aiAct can choose single-line replace, clear, or append input without implicit submission. Default step mode and Scroll parameters are unchanged.

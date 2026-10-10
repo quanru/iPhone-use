@@ -53,6 +53,15 @@ class ChatGPTSDKTests(unittest.TestCase):
                         if mode == 'act': content = content.replace('[15,30,45,60]', json.dumps([15 + plans * 15, 30, 45 + plans * 15, 60]))
                         if mode == 'act' and plans == 1:
                             content = '<memory>{"observed":{"fixture":"value-42"}}</memory>' + content
+                    elif mode.startswith('input-'):
+                        plans += 1
+                        input_mode = mode.removeprefix('input-')
+                        param = {'locate': {'prompt': 'title', 'bbox': [15, 30, 45, 60]},
+                                 'mode': input_mode, 'value': '' if input_mode == 'clear' else 'replacement'}
+                        content = ('<action-type>Input</action-type><action-param-json>' + json.dumps(param) + '</action-param-json>') if plans == 1 else '<complete success="true">Done</complete>'
+                    elif mode.startswith('wait-'):
+                        plans += 1
+                        content = '<data-json>' + json.dumps({'StatementIsTruthy': mode == 'wait-true' and plans >= 2}) + '</data-json>'
                     elif mode == 'swipe':
                         plans += 1
                         if plans <= 2:
@@ -76,7 +85,8 @@ class ChatGPTSDKTests(unittest.TestCase):
                     values = {'/wda/locked': False, '/status': {'ready': True},
                               '/session/borrowed/wda/screen': {'scale': 3},
                               '/session/borrowed/window/rect': {'x': 0, 'y': 0, 'width': 100, 'height': 200},
-                              '/session/borrowed/screenshot': screenshot()}
+                              '/session/borrowed/screenshot': screenshot(),
+                              '/session/borrowed/element/active': {'ELEMENT': 'title'}}
                     value = {'sessionId': 'borrowed', 'value': values.get(self.path, {})}
                 raw = json.dumps(value).encode()
                 self.send_response(200); self.send_header('Content-Type', 'application/json')
@@ -100,17 +110,21 @@ class ChatGPTSDKTests(unittest.TestCase):
                 f'url=s.replace("https://api.openai.com", "http://127.0.0.1:{port}");'
                 'return original(url,opts);};')
             outcomes = []
-            for mode in ('assert-true', 'assert-false', 'act', 'stuck', 'swipe'):
+            for mode in ('assert-true', 'assert-false', 'act', 'stuck', 'swipe', 'input-replace', 'input-clear', 'input-typeOnly', 'wait-true', 'wait-false'):
                 plans = 0
+                request_start = len(requests)
                 p = subprocess.run(['node', '--import', str(preload), str(WORKER)], cwd=root,
-                    input=json.dumps({**({'planning': 'compact'} if mode == 'stuck' else {}), 'action': 'act' if mode in ('act', 'stuck', 'swipe') else 'assert', 'args': {'text': 'Fixture task'},
+                    input=json.dumps({**({'planning': 'compact'} if mode == 'stuck' else {}), 'action': 'wait' if mode.startswith('wait-') else 'act' if mode in ('act', 'stuck', 'swipe') or mode.startswith('input-') else 'assert', 'args': {'text': 'Fixture task', **({'timeout_ms': 4000 if mode == 'wait-true' else 1500} if mode.startswith('wait-') else {})},
                         'host': '127.0.0.1', 'port': port, 'sessionId': 'borrowed', 'reportId': 'oauth-fixture'}),
                     capture_output=True, text=True, timeout=30,
                     env={k: v for k, v in os.environ.items() if not k.startswith(('MIDSCENE_', 'OPENAI_'))})
                 result = json.loads(p.stdout)
-                self.assertEqual(p.returncode, 1 if mode in ('assert-false', 'stuck') else 0, str(result) + p.stderr)
+                self.assertEqual(p.returncode, 1 if mode in ('assert-false', 'stuck', 'wait-false') else 0, str(result) + p.stderr)
                 self.assertEqual(result['model'], 'gpt-fixture')
                 outcomes.append(result)
+                if mode.startswith('wait-'):
+                    mutation_paths = ('/wda/tap', '/actions', '/wda/keys', '/clear', '/wda/apps/launch')
+                    self.assertFalse(any(r[1].endswith(mutation_paths) for r in requests[request_start:]))
             self.assertEqual(outcomes[2]['completion'], {'source': 'midscene_aiAct', 'summary': 'Done', 'independent_assertion': False})
             self.assertIn('screenshot', outcomes[2])
             self.assertNotIn('completion', outcomes[1])
@@ -120,11 +134,11 @@ class ChatGPTSDKTests(unittest.TestCase):
             dumps = re.findall(r'<script type="midscene_web_dump" data-group-id=[^>]*>(.*?)</script>', html, re.S)
             executions = {e['id']: e for dump in dumps for e in json.loads(dump)['executions']}
             tasks = [t for e in executions.values() for t in e['tasks']]
-            self.assertEqual(len(executions), 5)
+            self.assertEqual(len(executions), 10)
             self.assertEqual([t['output'] for t in tasks if t['subType'] == 'Assert'], [True, False])
             self.assertTrue(any(t['type'] == 'Action Space' and t['subType'] == 'Tap' for t in tasks))
             self.assertEqual(outcomes[1]['error'], 'assertion_failed')
-            self.assertEqual(len([r for r in requests if r[1] == '/session/borrowed/wda/tap']), 9)
+            self.assertEqual(len([r for r in requests if r[1] == '/session/borrowed/wda/tap']), 12)
             self.assertEqual(outcomes[3]['error'], 'midscene_no_progress')
             self.assertGreaterEqual(len([r for r in requests if r[1] == '/v1/responses']), 13)
 
@@ -133,3 +147,11 @@ class ChatGPTSDKTests(unittest.TestCase):
             # Same 90 screenshot-pixel movement at DPR 3 must reach the same WDA points.
             endpoints = [[(a['x'], a['y']) for a in gesture if a['type'] == 'pointerMove'] for gesture in gestures]
             self.assertEqual(endpoints, [[(15, 25), (15, 55)], [(15, 25), (15, 55)]])
+
+            clears = [r for r in requests if r[1] == '/session/borrowed/element/title/clear']
+            keys = [r for r in requests if r[1] == '/session/borrowed/wda/keys']
+            self.assertEqual(len(clears), 2)  # replace and clear, never typeOnly
+            self.assertEqual(len(keys), 2)  # replace and typeOnly, never clear
+            self.assertTrue(outcomes[8]['ok'])
+            self.assertEqual(outcomes[9]['error'], 'wait_timeout')
+            self.assertTrue(any(t['subType'] == 'WaitFor' for t in tasks))
