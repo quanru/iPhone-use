@@ -32,6 +32,7 @@ class MidsceneSDKTests(unittest.TestCase):
         requests = []
         models = []
         model_value = "fixture screen"
+        input_ready = True
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *args):
                 pass
@@ -63,10 +64,11 @@ class MidsceneSDKTests(unittest.TestCase):
                     values = {"/status": {"ready": True},
                               "/session/borrowed/wda/screen": {"scale": 3},
                               "/session/borrowed/window/rect": {"x": 0, "y": 0, "width": 100, "height": 200},
-                              "/session/borrowed/screenshot": screenshot()}
+                              "/session/borrowed/screenshot": screenshot(),
+                              "/session/borrowed/element/active": {"ELEMENT": "title"} if input_ready else {"error": "no such element", "message": "Focus is not ready"}}
                     raw = json.dumps({"sessionId": "borrowed", "value": values.get(self.path, {})}).encode()
                     content_type = "application/json"
-                self.send_response(200)
+                self.send_response(404 if self.path == "/session/borrowed/element/active" and not input_ready else 200)
                 self.send_header("Content-Type", content_type)
                 self.send_header("Content-Length", str(len(raw)))
                 self.end_headers()
@@ -81,14 +83,14 @@ class MidsceneSDKTests(unittest.TestCase):
         env = {key: value for key, value in os.environ.items() if not key.startswith("MIDSCENE_")}
 
         with tempfile.TemporaryDirectory() as directory:
-            def run(action, args=None, report_id="shared-task"):
+            def run(action, args=None, report_id="shared-task", expected_failure=False):
                 process = subprocess.run(["node", str(WORKER)], input=json.dumps({"action": action,
                     "args": args or {}, "host": "127.0.0.1", "port": port,
                     "sessionId": "borrowed", "reportId": report_id}), text=True,
                     capture_output=True, cwd=directory, env=env, timeout=60)
                 result = json.loads(process.stdout)
-                self.assertEqual(process.returncode, 1 if action == "record" and args["passed"] is False else 0,
-                                 process.stderr + str(result))
+                self.assertEqual(process.returncode, 1 if expected_failure or action == "record" and args["passed"] is False else 0,
+                                 process.stderr + str({k:v for k,v in result.items() if k != "screenshot"}))
                 return result
             result = run("screenshot")
             self.assertTrue(result["ok"])
@@ -121,6 +123,11 @@ class MidsceneSDKTests(unittest.TestCase):
             self.assertTrue(any(t["status"] == "failed" for e in executions.values() for t in e["tasks"]))
             self.assertNotEqual(run("screenshot", report_id="other-task")["report"], str(report))
             self.assertEqual(len(executions_in_report()), 6)
+            # The pinned SDK must wait for real focus and refuse typing when absent.
+            keys_before=sum(path.endswith('/wda/keys') for _,path in requests)
+            input_ready=False
+            self.assertFalse(run('input',{'text':'must not type'},report_id='focus-missing',expected_failure=True)['ok'])
+            self.assertEqual(sum(path.endswith('/wda/keys') for _,path in requests),keys_before)
         self.assertEqual(models, [], "Host-driven mode must never invoke a model")
         self.assertIn(("POST", "/session/borrowed/wda/tap"), requests)
         self.assertIn(("GET", "/session/borrowed/screenshot"), requests)

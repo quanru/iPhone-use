@@ -1,4 +1,4 @@
-// Compatibility with the pinned @midscene/core 1.14.0: locator centers are
+// Compatibility with the pinned @midscene/core prepatch: locator centers are
 // converted to device points before action.call, but relative Swipe.distance
 // (documented to the planner in screenshot pixels) is left unchanged.
 export function swipeInDevicePoints(param, context) {

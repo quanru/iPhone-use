@@ -181,3 +181,5 @@ Thanks to the maintainers and contributors of Appium, WebDriverAgent, and relate
 MIT License. See [third-party notices](THIRD_PARTY_NOTICES.md).
 
 In authorized AI mode, `pua_midscene(action="wait", text="Visible condition", timeout_ms=15000)` uses real `aiWaitFor` and appends to the same report ID. Use it only for asynchronous state; each check invokes the model. aiAct can choose single-line replace, clear, or append input without implicit submission. Default step mode and Scroll parameters are unchanged.
+
+This trial pins Midscene `1.13.4-beta-20261010095145.0`, including input readiness, touch scrolling, and fast-planning improvements. Installation uses the public npm registry.

@@ -227,14 +227,14 @@ test('model telemetry measures the stream, records failures, and excludes conten
 
 test('pinned SDK preserves explicit observations with fast planning and pruned screenshots', () => {
   const history = new ConversationHistory();
-  history.appendMessage({ role: 'user', content: [{type:'image', image:'old-screen'}] });
+  history.append({ role: 'user', content: [{type:'image_url', image_url:{url:'old-screen'}}] });
   const { parsed } = parseXMLPlanningResponse(
     '<memory>{"observed":{"model":"iPhone 17 Pro"},"done":["read model"]}</memory>' +
     '<action-type>Tap</action-type><action-param-json>{"locate":{"bbox":[0,0,10,10]}}</action-param-json>',
     ['action-type','action-param-json'], {includeThought:false});
   assert.equal(parsed.thought, undefined);
   history.appendMemory(parsed.memory);
-  history.appendMessage({role:'user',content:[{type:'image',image:'new-screen'}]});
+  history.append({role:'user',content:[{type:'image_url',image_url:{url:'new-screen'}}]});
   assert.match(JSON.stringify(history.snapshot(1)), /image ignored due to size optimization/);
   assert.match(history.memoriesToText(), /iPhone 17 Pro/);
   assert.match(history.memoriesToText(), /read model/);
