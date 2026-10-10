@@ -78,11 +78,16 @@ try {
     },
   }));
   await device.connect();
-  viewport = await device.size();
+  const screen = await device.getScreenSize();
+  viewport = { width: screen.width, height: screen.height };
+  // Fast planning uses the same image long-edge budget as single-step observations.
+  // Let the SDK resize and map coordinates together; assertions retain full resolution.
+  const screenshotShrinkFactor = compact
+    ? Math.max(1, Math.max(screen.width, screen.height) * screen.scale / 1568) : 1;
   agent = new IOSAgent(device, { generateReport: true, autoPrintReportMsg: false,
     reportFileName: `iphone-use-${request.reportId}`,
     reportAttributes: { 'data-group-id': `iphone-use-${request.reportId}` },
-    cache: false, replanningCycleLimit: 24, waitAfterAction: 600,
+    cache: false, replanningCycleLimit: 24, waitAfterAction: 600, screenshotShrinkFactor,
     aiActContext: (compact ? compactPlanningContext : '') + 'Only perform the requested task. If authentication, password, PIN, OTP, or biometric confirmation is required, stop and report failure for user takeover. Never invent credentials. Do not repeat a tap on an unchanged screen; move obscured targets into view. Input supports replace, clear (empty value), and typeOnly (append). Replace or clear only the requested field; use single-line text and never implicitly submit. Before finishing, observe the requested final state. In your completion message, state the concrete facts observed and any conditions that remain unverified; do not claim success merely because an action was dispatched.',
     modelConfig: { MIDSCENE_MODEL_NAME: model, MIDSCENE_MODEL_FAMILY: /^gpt-6/.test(model) ? 'gpt-6' : 'gpt-5',
       MIDSCENE_MODEL_API_KEY: 'oauth-managed-by-iphone-use', MIDSCENE_MODEL_BASE_URL: 'http://127.0.0.1:1',
