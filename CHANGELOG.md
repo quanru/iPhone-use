@@ -2,6 +2,9 @@
 
 ## 0.3.11 — 未发布
 
+- 统一 PUA 与 Midscene 截图保留策略，兼容旧截图文件；安装和执行前检查 Node.js 22.19+。
+- 保留执行中锁屏的恢复提示及报告；统计 Midscene 调用结果；日历验收增加重复事件检测。
+
 - 默认使用 Midscene 单步动作与原生 HTML 报告；同一 report_id 累积一个任务的操作、截图和核验记录。持久开关可选择原有 PUA 或 AI 自动执行。
 - 通过独立的 Sign in with ChatGPT 授权启用 aiAct、aiAssert 和 aiWaitFor，无需外部模型密钥；按任务引导用户试用 AI 能力。
 - aiAct 默认 fast，保留执行记忆、最终观察和完成说明；输入支持替换、清空与追加，条件等待可设置超时。

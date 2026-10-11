@@ -17,9 +17,13 @@ def request(path, body=None):
         raise RuntimeError(data['value']['error'])
     return data
 
-status = request('/status')
-assert status['value']['ios']['simulatorVersion'], 'Simulator required'
-prefix = '/session/' + status['sessionId']
+prefix = None
+
+def connect():
+    global prefix
+    status = request('/status')
+    assert status['value']['ios']['simulatorVersion'], 'Simulator required'
+    prefix = '/session/' + status['sessionId']
 
 def source():
     return ET.fromstring(request(prefix + '/source')['value'])
@@ -101,7 +105,18 @@ def audit(expected):
     passed = (not field(tree) and bool(named(tree, '编辑', 'Button')) and
         TITLE in labels and any(label.startswith(TITLE + ', 会议室 A,') for label in labels) and '2026年10月10日' in times and
         expected[0] in times and expected[1] in times)
-    return {'passed':passed,'expected':expected,'visible_labels':list(dict.fromkeys(labels))}
+    count = None
+    if passed:
+        # Independently inspect the saved day's entries, not just one open copy.
+        tap(one(named(tree, 'BackButton', 'Button')))
+        day = source()
+        assert_day(day)
+        matches = [e for e in day.iter() if e.tag.endswith('Button') and e.get('name') == 'event-shown:' + TITLE]
+        count = len(matches)
+        passed = count == 1
+        if matches:
+            tap(matches[0])  # Restore the detail screen for the next benchmark phase.
+    return {'passed':passed,'matching_event_count':count,'expected':expected,'visible_labels':list(dict.fromkeys(labels))}
 
 def cleanup():
     for _ in range(10):
@@ -124,7 +139,7 @@ def cleanup():
             matches = named(tree, 'event-shown:' + TITLE, 'Button')
             if not matches:
                 return {'clean':True}
-            tap(one(matches)); continue
+            tap(matches[0]); continue
         buttons = [e.get('label') for e in visible(tree, 'Button')]
         if not buttons or set(buttons) == {'今天', '日历', '收件箱'}:
             # Native day view is still rendering after discarding the form.
@@ -134,6 +149,7 @@ def cleanup():
     raise RuntimeError('Cleanup did not converge')
 
 if __name__ == '__main__':
+    connect()
     action = sys.argv[1]
     result = prepare() if action == 'prepare' else cleanup() if action == 'cleanup' else audit(sys.argv[2:4])
     print(json.dumps(result, ensure_ascii=False))

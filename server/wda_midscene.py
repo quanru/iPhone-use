@@ -13,6 +13,7 @@ from wda_client import WDAError
 import wda_image
 import wda_chatgpt
 import wda_mode
+import wda_setup
 
 WORKER = Path(__file__).parent / "midscene" / "run.mjs"
 MUTATIONS = {"tap", "swipe", "input", "home", "launch", "act"}
@@ -72,6 +73,12 @@ def run(runtime, action, report_id=None, planning=None, **args):
     node = shutil.which("node")
     if not node or not (WORKER.parent / "node_modules/@midscene/ios/package.json").is_file():
         raise WDAError("midscene_not_installed", "Install Node.js 22.19+ and run npm ci --prefix <plugin-root>/server/midscene.")
+    try:
+        version = subprocess.run([node, "--version"], capture_output=True, text=True, timeout=5, check=True).stdout
+    except (OSError, subprocess.SubprocessError):
+        version = ""
+    if not wda_setup._node_supported(version):
+        raise WDAError("midscene_node_unsupported", "Install Node.js 22.19+ / 24+ before using Midscene.")
     if action in ("act", "assert", "wait") and not wda_chatgpt.run(runtime.state_dir, "auth_status")["authorized"]:
         raise WDAError("chatgpt_sign_in_required", "Use pua_midscene(action=auth_login) and complete official ChatGPT consent before act/assert/wait.")
     if runtime.screen.paused():
@@ -112,18 +119,18 @@ def run(runtime, action, report_id=None, planning=None, **args):
             data = base64.b64decode(encoded.split(",", 1)[-1], validate=True)
             if not data.startswith(wda_image.PNG_SIGNATURE):
                 raise ValueError()
-            artifacts = Path(runtime.state_dir) / "artifacts"
-            artifacts.mkdir(mode=0o700, parents=True, exist_ok=True)
-            path = artifacts / ("midscene-" + uuid.uuid4().hex + ".png")
-            path.write_bytes(data)
-            path.chmod(0o600)
+            path = wda_image.save_capture(runtime.state_dir, data)
             image_path, mime, width, height = wda_image.model_image(path)
+            wda_image.prune_captures(runtime.state_dir)
             viewport = result["viewport"]
             result["image"] = {"path": str(image_path), "mimeType": mime,
                                "width": width, "height": height,
                                "pixel_to_point": [viewport["width"] / width, viewport["height"] / height]}
             details["observation"] = {"image": result["image"], "viewport": viewport}
         if process.returncode or result.get("ok") is not True:
+            if result.get("error") == "phone_locked":
+                raise WDAError("phone_locked", "Unlock the iPhone and verify READY before continuing.",
+                               uncertain=action in MUTATIONS, details=details)
             raise ValueError()
         return {**result, "report_id": report_id}
     except WDAError as exc:

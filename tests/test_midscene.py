@@ -39,6 +39,7 @@ class MidsceneTests(unittest.TestCase):
         self.addCleanup(patch.stopall)
         patch.object(wda_midscene, 'WORKER', worker).start()
         patch.object(wda_midscene.shutil, 'which', return_value='/usr/bin/node').start()
+        patch.object(wda_midscene.subprocess, 'run', return_value=Mock(stdout='v24.21.0')).start()
         self.process = patch.object(wda_midscene, 'execute_worker', return_value=Mock(
             returncode=0, stdout='{"ok":true}')).start()
 
@@ -191,6 +192,42 @@ class MidsceneTests(unittest.TestCase):
             self.call()
         self.assertEqual(error.exception.code, 'phone_locked')
         self.process.assert_not_called()
+
+    def test_midscene_only_images_use_shared_bounded_retention(self):
+        import base64
+        import wda_image
+        data = wda_image.PNG_SIGNATURE + b'fixture'
+        self.process.return_value = Mock(returncode=0, stdout=json.dumps({
+            'ok': True, 'screenshot': base64.b64encode(data).decode(),
+            'viewport': {'width': 402, 'height': 874}}))
+        with patch.object(wda_image, 'model_image', side_effect=lambda p: (p, 'image/png', 402, 874)):
+            for _ in range(105):
+                result = self.call()
+        self.assertTrue(Path(result['image']['path']).is_file())
+        self.assertEqual(len(list((self.root / 'artifacts').glob('*.png'))), 100)
+        self.assertNotIn('midscene-', Path(result['image']['path']).name)
+
+    def test_old_node_refuses_worker_before_device_access(self):
+        for version in ('v20.19.0', 'v22.18.0', 'broken'):
+            with patch.object(wda_midscene.subprocess, 'run', return_value=Mock(stdout=version)):
+                with self.assertRaises(WDAError) as error:
+                    self.call()
+                self.assertEqual(error.exception.code, 'midscene_node_unsupported')
+        self.process.assert_not_called()
+        self.runtime.client.request.assert_not_called()
+
+    def test_worker_lock_error_keeps_recovery_report_and_uncertainty(self):
+        wda_mode.settings(self.root, 'ai')
+        with patch.object(wda_midscene.wda_chatgpt, 'run', return_value={'authorized': True}):
+            for action in ('act', 'assert', 'wait'):
+                self.process.return_value = Mock(returncode=1, stdout=json.dumps({
+                    'ok': False, 'error': 'phone_locked', 'report': '/local/report.html'}))
+                with self.assertRaises(WDAError) as error:
+                    self.call(action, text='Check the current screen')
+                self.assertEqual(error.exception.code, 'phone_locked')
+                self.assertEqual(error.exception.uncertain, action == 'act')
+                self.assertEqual(error.exception.details['report'], '/local/report.html')
+                self.runtime.screen.set_paused.assert_called()
 
     def test_timeout_uncertain_for_mutation_no_replay(self):
         self.process.side_effect = subprocess.TimeoutExpired('node', 60, stderr='secret')
