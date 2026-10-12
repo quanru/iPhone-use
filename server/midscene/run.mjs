@@ -36,9 +36,9 @@ try {
   // Do not return this pre-action frame as the resulting screen if dispatch fails.
   screenshot = undefined;
   report.startAction();
-  if (action === 'tap') await device.tapPoint(point(args.x, args.y));
-  else if (action === 'swipe') await device.swipePoint(point(args.x, args.y), point(args.end_x, args.end_y), 500);
-  else if (action === 'input') await device.typeText(args.text, { autoDismissKeyboard: false });
+  if (action === 'tap') await device.inputPrimitives.pointer.tap(point(args.x, args.y));
+  else if (action === 'swipe') await device.inputPrimitives.touch.swipe(point(args.x, args.y), point(args.end_x, args.end_y), { duration: 500 });
+  else if (action === 'input') await device.inputPrimitives.keyboard.typeText(args.text, { replace: false, autoDismissKeyboard: false });
   else if (action === 'home') await device.home();
   else if (action === 'launch') await device.launch(args.text);
   else if (!['screenshot', 'record'].includes(action)) throw new Error('Unsupported action');
