@@ -45,7 +45,12 @@ class PackagingTests(unittest.TestCase):
             entries = {Path(name).relative_to('iphone-use').as_posix() for name in archive.namelist()}
         installed = {p.relative_to(self.stage).as_posix() for p in self.stage.rglob('*') if p.is_file()}
         for contents in (entries, installed):
-            self.assertFalse(any(p.startswith(('docs/', 'evals/', 'plugins/', 'ui/node_modules/')) for p in contents))
+            self.assertFalse(any(p.startswith(('evals/', 'plugins/', 'ui/node_modules/')) for p in contents))
+            self.assertEqual({p for p in contents if p.startswith('docs/')}, {
+                'docs/pr-showcase.md', 'docs/pr-media/calendar-workflow.png',
+                'docs/pr-media/picker-gesture.png', 'docs/pr-media/precise-input.png',
+                'docs/pr-media/report-replay.png'})
+            self.assertNotIn('docs/private-notes.md', contents)
             self.assertNotIn('server/posthog.local.json', contents)
             self.assertIn('server/analytics.py', contents)
             self.assertIn('server/posthog.json', contents)
@@ -67,7 +72,7 @@ class PackagingTests(unittest.TestCase):
         for name in ('assets/phone-screen.html', 'tooling/screen-stream.mjs', 'tooling/forward.mjs',
                      'tooling/package-lock.json', 'scripts/phone.py', 'scripts/check_screen_ui.py'):
             self.assertEqual((self.stage / name).read_bytes(), (ROOT / name).read_bytes(), name)
-        for document in list((self.stage / 'skills').rglob('*.md')) + [self.stage / 'README.md', self.stage / 'README.en.md', self.stage / 'CHANGELOG.md']:
+        for document in list((self.stage / 'skills').rglob('*.md')) + [self.stage / 'README.md', self.stage / 'README.en.md', self.stage / 'CHANGELOG.md', self.stage / 'docs/pr-showcase.md']:
             for target in re.findall(r'\]\(([^)]+)\)', document.read_text()):
                 if '://' in target or target.startswith('#'):
                     continue
