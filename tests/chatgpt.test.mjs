@@ -11,7 +11,7 @@ import { ConversationHistory } from '../server/midscene/node_modules/@midscene/c
 import { TaskBuilder } from '../server/midscene/node_modules/@midscene/core/dist/es/agent/task-builder.mjs';
 import { ActionSwipeParamSchema } from '../server/midscene/node_modules/@midscene/core/dist/es/device/index.mjs';
 
-test('pinned SDK converts relative Swipe distance exactly once before device dispatch', async () => {
+test('pinned SDK preserves explicit Swipe distance while converting locator coordinates', async () => {
   for (const ratio of [0.5, 1, 1.5, 2, 3]) {
     let received;
     const action = {
@@ -25,7 +25,7 @@ test('pinned SDK converts relative Swipe distance exactly once before device dis
     await tasks.find(task => task.type === 'Action Space').executor({
       task: { timing: {} }, uiContext: { shrunkShotToLogicalRatio: ratio },
     });
-    assert.equal(received.distance, 90 / ratio);
+    assert.equal(received.distance, 90);
     assert.deepEqual(received.start.center, [Math.round(120 / ratio), Math.round(240 / ratio)]);
     assert.equal(received.duration, 500);
     assert.equal(param.distance, 90);

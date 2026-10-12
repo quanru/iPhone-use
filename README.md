@@ -205,6 +205,6 @@ MIT License。第三方组件说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTI
 
 AI 模式还支持 `pua_midscene(action="wait", text="页面条件", timeout_ms=15000)`，使用真正的 `aiWaitFor` 并合并到同一报告；仅在等待异步状态时调用，会产生额外模型请求。aiAct 的输入可按任务选择替换、清空或追加，仍限单行且不自动提交。默认单步模式和 Scroll 参数不变。
 
-当前试用版锁定 Midscene `1.15.2-beta-20261012080728.0`，包含输入框就绪检测、滚动安全、Swipe 时长规划、规划历史去重和相对距离换算；安装时从公开 npm 获取。该版本来自临时集成分支，固定版本号，不跟随浮动 beta 标签。距离转换由 SDK 执行，插件不再重复转换。
+当前试用版锁定 Midscene `1.15.2-beta-20261012093542.0`，包含输入框就绪检测、滚动安全、Swipe 时长规划、规划历史去重和相对距离换算；安装时从公开 npm 获取。该版本来自临时集成分支，固定版本号，不跟随浮动 beta 标签。距离转换由 SDK 的 AI 规划阶段执行；显式动作参数和 YAML 回放保持逻辑距离，插件不再重复转换。
 
 [SDK 拆分 PR 与依赖关系](https://github.com/web-infra-dev/midscene/pull/3236) · [集成版本发布记录](https://github.com/web-infra-dev/midscene/actions/runs/38221272475)
