@@ -12,6 +12,10 @@ The plugin sends anonymous usage statistics to its own PostHog project by defaul
 
 **Before using iPhone Use, install, sign, and start WDA Runner on your own iPhone.** WDA is the on-device execution service. The prompt and setup workflow below can help Codex complete the initial installation; a healthy existing WDA can be reused.
 
+## Task and report examples
+
+See the [validated examples](docs/pr-showcase.md): a complete Calendar workflow, a small native-picker gesture, explicit input replacement and clearing, and the task's HTML replay report. These are recorded simulator runs. Default single-step actions and reports need no additional model authorization; AI execution and visual verification require separate Sign in with ChatGPT authorization.
+
 ## Ask Codex to install it
 
 Paste this prompt into Codex running on your Mac:

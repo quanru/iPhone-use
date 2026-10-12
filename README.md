@@ -12,6 +12,10 @@ iPhone Use 使用 [WebDriverAgent](https://github.com/appium/WebDriverAgent)（W
 
 **使用前，需要先在你自己的 iPhone 上安装、签名并启动 WDA Runner。** WDA 是运行在手机上的执行服务；下面的提示词和 setup 流程可以让 Codex 协助完成首次安装，已有健康的 WDA 可直接复用。
 
+## 操作与报告示例
+
+查看[实测图集](docs/pr-showcase.md)：完整日历任务、原生时间滚轮微调、输入替换与清空，以及同一任务的 HTML 回放报告。示例来自已完成的模拟器测试。默认单步动作与报告无需额外模型授权；自动执行和视觉核验需单独通过 Sign in with ChatGPT 授权。
+
 ## 用一段提示词让 Codex 安装
 
 将下面这段话复制到本机 Codex：

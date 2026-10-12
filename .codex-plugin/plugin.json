@@ -1,7 +1,7 @@
 {
   "name": "iphone-use",
   "version": "0.3.11",
-  "description": "通过 Midscene 操作 iPhone，由当前聊天模型看图和决策，无需外部模型配置，按任务累积 HTML 报告。",
+  "description": "让 Codex 通过 USB 操作真实 iPhone，支持引导安装、App 自动化、实时屏幕、截图回退与任务报告。",
   "author": {
     "name": "ZHONG XIN"
   },
@@ -11,7 +11,7 @@
   "interface": {
     "displayName": "iPhone Use",
     "shortDescription": "Let Codex control your iPhone",
-    "longDescription": "默认通过 Midscene 执行 iPhone 动作，由当前聊天模型看图、决策和验收，无需外部模型配置。复用 PUA 的 USB、Xcode、签名与连接管理，实时显示手机屏幕，同一任务累积到一份 HTML 报告。",
+    "longDescription": "用自然语言让 Codex 读取和操作真实 iPhone，完成点击、滚动、输入和连续任务，并核验结果。通过 PUA 管理 USB、Xcode、签名与设备连接，实时展示手机屏幕；同一任务的操作、截图和核验记录可累积到一份 HTML 报告。",
     "developerName": "ZHONG XIN",
     "category": "Productivity",
     "logo": "./assets/icon.svg",
