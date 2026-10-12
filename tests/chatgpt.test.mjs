@@ -8,21 +8,28 @@ import { ChatGPTAuth, verifyIdentity } from '../server/midscene/chatgpt-auth.mjs
 import { createChatGPTClient } from '../server/midscene/chatgpt-client.mjs';
 import { parseXMLPlanningResponse } from '../server/midscene/node_modules/@midscene/core/dist/es/ai-model/workflows/planning/standard-planning-parser.mjs';
 import { ConversationHistory } from '../server/midscene/node_modules/@midscene/core/dist/es/ai-model/workflows/planning/conversation-history.mjs';
-import { swipeInDevicePoints } from '../server/midscene/swipe-coordinates.mjs';
+import { TaskBuilder } from '../server/midscene/node_modules/@midscene/core/dist/es/agent/task-builder.mjs';
+import { ActionSwipeParamSchema } from '../server/midscene/node_modules/@midscene/core/dist/es/device/index.mjs';
 
-test('relative swipes use the current screenshot scale without changing reports or endpoints', () => {
-  const param = { start: { center: [159, 547] }, direction: 'down', distance: 90, duration: 1500 };
-  for (const ratio of [1, 2, 3, 1.5]) {
-    const result = swipeInDevicePoints(param, { uiContext: { shrunkShotToLogicalRatio: ratio } });
-    assert.equal(result.distance, 90 / ratio);
-    assert.deepEqual(result.start, param.start);
-    assert.equal(result.duration, 1500);
+test('pinned SDK converts relative Swipe distance exactly once before device dispatch', async () => {
+  for (const ratio of [0.5, 1, 1.5, 2, 3]) {
+    let received;
+    const action = {
+      name: 'Swipe', description: 'swipe', paramSchema: ActionSwipeParamSchema,
+      delayBeforeRunner: 0, delayAfterRunner: 0,
+      call: async param => { received = param; },
+    };
+    const builder = new TaskBuilder({ interfaceInstance: {}, service: {}, actionSpace: [action] });
+    const param = { start: { center: [120, 240] }, direction: 'up', distance: 90, duration: 500 };
+    const { tasks } = await builder.build([{ type: 'Swipe', thought: '', param }], {}, {});
+    await tasks.find(task => task.type === 'Action Space').executor({
+      task: { timing: {} }, uiContext: { shrunkShotToLogicalRatio: ratio },
+    });
+    assert.equal(received.distance, 90 / ratio);
+    assert.deepEqual(received.start.center, [Math.round(120 / ratio), Math.round(240 / ratio)]);
+    assert.equal(received.duration, 500);
     assert.equal(param.distance, 90);
   }
-  const endpoint = { start: { center: [159, 547] }, end: { center: [159, 577] } };
-  assert.equal(swipeInDevicePoints(endpoint, {}), endpoint);
-  for (const ratio of [undefined, 0, -1, NaN, Infinity])
-    assert.throws(() => swipeInDevicePoints(param, { uiContext: { shrunkShotToLogicalRatio: ratio } }));
 });
 
 const scope = 'openid profile email offline_access resource.invoke chatgpt.tokens.use.direct';
@@ -227,14 +234,14 @@ test('model telemetry measures the stream, records failures, and excludes conten
 
 test('pinned SDK preserves explicit observations with fast planning and pruned screenshots', () => {
   const history = new ConversationHistory();
-  history.append({ role: 'user', content: [{type:'image_url', image_url:{url:'old-screen'}}] });
+  history.appendMessage({ role: 'user', content: [{type:'image', url:'old-screen'}] });
   const { parsed } = parseXMLPlanningResponse(
     '<memory>{"observed":{"model":"iPhone 17 Pro"},"done":["read model"]}</memory>' +
     '<action-type>Tap</action-type><action-param-json>{"locate":{"bbox":[0,0,10,10]}}</action-param-json>',
     ['action-type','action-param-json'], {includeThought:false});
   assert.equal(parsed.thought, undefined);
   history.appendMemory(parsed.memory);
-  history.append({role:'user',content:[{type:'image_url',image_url:{url:'new-screen'}}]});
+  history.appendMessage({role:'user',content:[{type:'image',url:'new-screen'}]});
   assert.match(JSON.stringify(history.snapshot(1)), /image ignored due to size optimization/);
   assert.match(history.memoriesToText(), /iPhone 17 Pro/);
   assert.match(history.memoriesToText(), /read model/);
